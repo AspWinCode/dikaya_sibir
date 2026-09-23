@@ -9,6 +9,7 @@ import { applyTheme, useThemeStore } from "@/shared/theme/store";
 import { MainPage } from "@/pages/MainPage";
 import { SignInPage } from "@/pages/SignInPage";
 import { SignUpPage } from "@/pages/SignUpPage";
+import { InvitePage } from "@/pages/InvitePage";
 import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
 import { ResetPasswordPage } from "@/pages/ResetPasswordPage";
 import { AdminPage } from "@/pages/AdminPage";
@@ -62,6 +63,7 @@ export function EditorApp() {
         <Route path="/landing" element={<LandingPage />} />
         <Route path="/signin" element={<SignInPage />} />
         <Route path="/signup" element={<SignUpPage />} />
+        <Route path="/invite/:token" element={<InvitePage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/auth/yandex/callback" element={<OAuthCallbackPage />} />

@@ -47,6 +47,9 @@ export function SignInPage() {
   const [password, setPassword] = useState("");
   const [totpCode, setTotpCode] = useState("");
   const [totpRequired, setTotpRequired] = useState(false);
+  // Only same-app relative paths — never "//host" or absolute URLs (open redirect).
+  const nextParam = searchParams.get("next");
+  const next = nextParam && /^\/(?![/\\])/.test(nextParam) ? nextParam : "/";
   const oauthError = OAUTH_ERRORS[searchParams.get("error") ?? ""] ?? null;
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -74,7 +77,7 @@ export function SignInPage() {
           totp_code: totpRequired && totpCode ? totpCode : undefined,
         });
       }
-      navigate("/", { replace: true });
+      navigate(next, { replace: true });
     } catch (err) {
       const msg = extractError(err, mode === "ldap");
       if (mode === "standard" && msg.toLowerCase().includes("totp")) {

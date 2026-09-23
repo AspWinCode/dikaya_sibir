@@ -578,6 +578,11 @@ function tokenPair(): TokenPair {
   };
 }
 
+const mockInviteLinks: {
+  id: string; app_id: string; role: string; allow_signup: boolean; max_uses: number | null;
+  use_count: number; expires_at: string | null; created_at: string; token: string; revoked: boolean;
+}[] = [];
+
 export const handlers = [
   http.get(`${API}/health`, () =>
     HttpResponse.json({ status: "ok", version: "mock", checks: {} }),
@@ -839,6 +844,52 @@ export const handlers = [
     };
     mockUsers.push(newUser);
     return HttpResponse.json(newUser, { status: 201 });
+  }),
+
+  // Invite links
+  http.get(`${API}/apps/:appId/invite-links`, ({ params }) =>
+    HttpResponse.json(mockInviteLinks.filter((l) => l.app_id === params.appId && !l.revoked).map(({ token: _t, revoked: _r, ...l }) => l)),
+  ),
+  http.post(`${API}/apps/:appId/invite-links`, async ({ params, request }) => {
+    const body = (await request.json()) as { role?: string; expires_in_days?: number | null; max_uses?: number | null };
+    const days = body.expires_in_days === undefined ? 7 : body.expires_in_days;
+    const link = {
+      id: crypto.randomUUID(),
+      app_id: params.appId as string,
+      role: body.role ?? "editor",
+      allow_signup: true,
+      max_uses: body.max_uses ?? null,
+      use_count: 0,
+      expires_at: days ? new Date(Date.now() + days * 86400000).toISOString() : null,
+      created_at: new Date().toISOString(),
+      token: crypto.randomUUID().replace(/-/g, ""),
+      revoked: false,
+    };
+    mockInviteLinks.push(link);
+    const { revoked: _r, ...out } = link;
+    return HttpResponse.json(out, { status: 201 });
+  }),
+  http.delete(`${API}/apps/:appId/invite-links/:linkId`, ({ params }) => {
+    const l = mockInviteLinks.find((x) => x.id === params.linkId);
+    if (l) l.revoked = true;
+    return new HttpResponse(null, { status: 204 });
+  }),
+  http.get(`${API}/invites/:token`, ({ params }) => {
+    const l = mockInviteLinks.find((x) => x.token === params.token && !x.revoked);
+    if (!l) return HttpResponse.json({ detail: "Invite link is invalid or expired" }, { status: 410 });
+    return HttpResponse.json({ app_id: l.app_id, app_name: "Демо-приложение", role: l.role, allow_signup: l.allow_signup, expires_at: l.expires_at });
+  }),
+  http.post(`${API}/invites/:token/accept`, ({ params }) => {
+    const l = mockInviteLinks.find((x) => x.token === params.token && !x.revoked);
+    if (!l) return HttpResponse.json({ detail: "Invite link is invalid or expired" }, { status: 410 });
+    l.use_count += 1;
+    return HttpResponse.json({ app_id: l.app_id, role: l.role, already_member: false });
+  }),
+  http.post(`${API}/invites/:token/signup`, ({ params }) => {
+    const l = mockInviteLinks.find((x) => x.token === params.token && !x.revoked);
+    if (!l) return HttpResponse.json({ detail: "Invite link is invalid or expired" }, { status: 410 });
+    l.use_count += 1;
+    return HttpResponse.json({ access_token: "mock-access", refresh_token: "mock-refresh", expires_in: 900 }, { status: 201 });
   }),
 
   // Entities

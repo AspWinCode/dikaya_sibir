@@ -15,3 +15,9 @@ export function buildEditorUrl(appId: string | null | undefined, origin: string)
   const base = origin.replace(/\/+$/, "");
   return appId ? `${base}/editor/views?app=${appId}` : `${base}/editor/`;
 }
+
+/** Build a shareable invite URL: `<origin>/editor/invite/<token>`. */
+export function buildInviteUrl(token: string, origin: string): string {
+  const base = origin.replace(/\/+$/, "");
+  return `${base}/editor/invite/${encodeURIComponent(token)}`;
+}

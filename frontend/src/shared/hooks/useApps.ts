@@ -10,6 +10,10 @@ import {
   getApp,
   getAppLock,
   listAppMembers,
+  listInviteLinks,
+  createInviteLink,
+  revokeInviteLink,
+  type InviteLinkCreate,
   listApps,
   listSnapshots,
   publishApp,
@@ -170,5 +174,30 @@ export function useRemoveAppMember(appId: string) {
   return useMutation({
     mutationFn: (userId: string) => removeAppMember(appId, userId),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["app-members", appId] }); },
+  });
+}
+
+export function useInviteLinks(appId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["app-invite-links", appId],
+    queryFn: () => listInviteLinks(appId!),
+    enabled: !!appId,
+    retry: false,
+  });
+}
+
+export function useCreateInviteLink(appId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: InviteLinkCreate) => createInviteLink(appId, body),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["app-invite-links", appId] }); },
+  });
+}
+
+export function useRevokeInviteLink(appId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (linkId: string) => revokeInviteLink(appId, linkId),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["app-invite-links", appId] }); },
   });
 }

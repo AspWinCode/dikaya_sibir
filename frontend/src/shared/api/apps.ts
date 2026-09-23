@@ -165,3 +165,70 @@ export async function addAppMember(appId: string, userId: string, role: string):
 export async function removeAppMember(appId: string, userId: string): Promise<void> {
   await apiClient.delete(`/apps/${appId}/members/${userId}`);
 }
+
+/* ── Invite links ── */
+
+export type InviteRole = "admin" | "editor" | "viewer";
+
+export interface InviteLink {
+  id: string;
+  app_id: string;
+  role: InviteRole;
+  allow_signup: boolean;
+  max_uses: number | null;
+  use_count: number;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export interface InviteLinkCreated extends InviteLink {
+  /** Raw token — returned only once, at creation time. */
+  token: string;
+}
+
+export interface InviteLinkCreate {
+  role?: InviteRole;
+  expires_in_days?: number | null;
+  max_uses?: number | null;
+  allow_signup?: boolean;
+}
+
+export interface InvitePreview {
+  app_id: string;
+  app_name: string;
+  role: InviteRole;
+  allow_signup: boolean;
+  expires_at: string | null;
+}
+
+export async function listInviteLinks(appId: string): Promise<InviteLink[]> {
+  const { data } = await apiClient.get<InviteLink[]>(`/apps/${appId}/invite-links`);
+  return data;
+}
+
+export async function createInviteLink(appId: string, body: InviteLinkCreate): Promise<InviteLinkCreated> {
+  const { data } = await apiClient.post<InviteLinkCreated>(`/apps/${appId}/invite-links`, body);
+  return data;
+}
+
+export async function revokeInviteLink(appId: string, linkId: string): Promise<void> {
+  await apiClient.delete(`/apps/${appId}/invite-links/${linkId}`);
+}
+
+export async function getInvitePreview(token: string): Promise<InvitePreview> {
+  const { data } = await apiClient.get<InvitePreview>(`/invites/${encodeURIComponent(token)}`);
+  return data;
+}
+
+export async function acceptInvite(token: string): Promise<{ app_id: string; role: string; already_member: boolean }> {
+  const { data } = await apiClient.post(`/invites/${encodeURIComponent(token)}/accept`);
+  return data;
+}
+
+export async function signupViaInvite(
+  token: string,
+  body: { email: string; display_name: string; password: string },
+): Promise<{ access_token: string; refresh_token: string }> {
+  const { data } = await apiClient.post(`/invites/${encodeURIComponent(token)}/signup`, body);
+  return data;
+}

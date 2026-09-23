@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, type ReactNode } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ru } from "date-fns/locale";
 import { cn } from "@/lib/cn";
-import { buildRuntimeUrl, buildEditorUrl } from "@/shared/lib/appLinks";
+import { isAxiosError } from "axios";
+import { buildRuntimeUrl, buildEditorUrl, buildInviteUrl } from "@/shared/lib/appLinks";
 import {
   useAppMembers,
   useAddAppMember,
@@ -10,9 +11,12 @@ import {
   useAppSnapshots,
   useCreateSnapshot,
   useRollbackSnapshot,
+  useInviteLinks,
+  useCreateInviteLink,
+  useRevokeInviteLink,
 } from "@/shared/hooks/useApps";
 import { useUsers, useInviteUser } from "@/shared/hooks/useUsers";
-import type { AppSnapshot } from "@/shared/api/apps";
+import type { AppSnapshot, InviteRole } from "@/shared/api/apps";
 
 /* ─────────────────────────────────────────────────
    PRIMITIVES
@@ -477,6 +481,40 @@ const ROLE_LABELS: Record<string, string> = {
   viewer: "Просмотр",
 };
 
+/** Copy to clipboard with a textarea fallback (Clipboard API requires HTTPS). */
+function copyText(text: string) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).catch(() => copyTextFallback(text));
+    return;
+  }
+  copyTextFallback(text);
+}
+
+function copyTextFallback(text: string) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  document.execCommand("copy");
+  document.body.removeChild(ta);
+}
+
+const LINK_ROLE_OPTIONS: { value: InviteRole; label: string }[] = [
+  { value: "viewer", label: "Просмотр" },
+  { value: "editor", label: "Редактор" },
+  { value: "admin", label: "Администратор" },
+];
+
+const LINK_DAYS_OPTIONS: { value: number | null; label: string }[] = [
+  { value: 1, label: "1 день" },
+  { value: 7, label: "7 дней" },
+  { value: 30, label: "30 дней" },
+  { value: null, label: "Бессрочно" },
+];
+
 function initials(email: string, displayName?: string | null): string {
   if (displayName) {
     const parts = displayName.trim().split(/\s+/);
@@ -505,28 +543,37 @@ export function RolesModal({
   const addMember = useAddAppMember(appId ?? "");
   const inviteUser = useInviteUser();
 
+  const [linkRole, setLinkRole] = useState<InviteRole>("viewer");
+  const [linkDays, setLinkDays] = useState<number | null>(7);
+  const [linkUrl, setLinkUrl] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState("");
+  const { data: inviteLinks } = useInviteLinks(appId);
+  const createLink = useCreateInviteLink(appId ?? "");
+  const revokeLink = useRevokeInviteLink(appId ?? "");
+
+  /** Create a real invite link (token grants membership) and copy it. */
   function copyLink() {
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const url = buildRuntimeUrl(appId, origin);
-    // Fallback for HTTP (clipboard API requires HTTPS)
-    if (navigator.clipboard) {
-      void navigator.clipboard.writeText(url).then(() => {
-        setLinkCopied(true);
-        setTimeout(() => setLinkCopied(false), 1500);
-      });
-    } else {
-      const ta = document.createElement("textarea");
-      ta.value = url;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
-      setLinkCopied(true);
-      setTimeout(() => setLinkCopied(false), 1500);
-    }
+    if (!appId || createLink.isPending) return;
+    setLinkError("");
+    createLink.mutate(
+      { role: linkRole, expires_in_days: linkDays },
+      {
+        onSuccess: (created) => {
+          const url = buildInviteUrl(created.token, window.location.origin);
+          setLinkUrl(url);
+          copyText(url);
+          setLinkCopied(true);
+          setTimeout(() => setLinkCopied(false), 1500);
+        },
+        onError: (err) => {
+          setLinkError(
+            isAxiosError(err) && err.response?.status === 403
+              ? "Создавать ссылки могут только владелец и администраторы приложения"
+              : "Не удалось создать ссылку",
+          );
+        },
+      },
+    );
   }
 
   function handleInviteKey(e: React.KeyboardEvent) {
@@ -622,6 +669,61 @@ export function RolesModal({
           )}
         </div>
 
+        {/* Invite link settings + active links */}
+        {appId && (
+          <div className="flex flex-col gap-[10px]">
+            <div className="flex items-center gap-[10px] flex-wrap text-meta text-primary">
+              <span>Ссылка-приглашение: роль</span>
+              <select
+                value={linkRole}
+                onChange={(e) => setLinkRole(e.target.value as InviteRole)}
+                className="bg-cardbg rounded-[8px] px-2 h-[30px] outline-none text-[15px]"
+              >
+                {LINK_ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              <span>срок</span>
+              <select
+                value={linkDays ?? ""}
+                onChange={(e) => setLinkDays(e.target.value ? Number(e.target.value) : null)}
+                className="bg-cardbg rounded-[8px] px-2 h-[30px] outline-none text-[15px]"
+              >
+                {LINK_DAYS_OPTIONS.map((o) => <option key={o.label} value={o.value ?? ""}>{o.label}</option>)}
+              </select>
+            </div>
+            {linkUrl && (
+              <input
+                readOnly
+                value={linkUrl}
+                onFocus={(e) => e.currentTarget.select()}
+                className="w-full h-[34px] px-3 bg-cardbg rounded-[8px] text-[13px] text-primary outline-none"
+              />
+            )}
+            {linkError && <p className="text-[13px] text-red-400 pl-1">{linkError}</p>}
+            {(inviteLinks ?? []).length > 0 && (
+              <div className="flex flex-col gap-[6px]">
+                <span className="text-[13px] text-primary/60">Активные ссылки</span>
+                {(inviteLinks ?? []).map((l) => (
+                  <div key={l.id} className="flex justify-between items-center text-[13px] text-primary">
+                    <span>
+                      {ROLE_LABELS[l.role] ?? l.role}
+                      {" · "}
+                      {l.expires_at ? `до ${new Date(l.expires_at).toLocaleDateString("ru-RU")}` : "бессрочно"}
+                      {" · "}
+                      использована {l.use_count}{l.max_uses ? ` из ${l.max_uses}` : ""}
+                    </span>
+                    <button
+                      onClick={() => revokeLink.mutate(l.id)}
+                      className="text-primary/50 hover:text-red-400 transition-colors underline"
+                    >
+                      Отозвать
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Users list */}
         <div className="flex flex-col gap-[10px] max-h-[260px] overflow-y-auto">
           {isLoading && (
@@ -676,11 +778,12 @@ export function RolesModal({
         {/* Bottom buttons */}
         <div className="flex justify-between items-center py-[30px]">
           <div className="flex gap-5">
-            <button onClick={copyLink} title={linkCopied ? "Скопировано" : "Скопировать ссылку"}
+            <button onClick={copyLink} disabled={!appId || createLink.isPending}
+              title="Создать ссылку-приглашение и скопировать её"
               className="flex items-center gap-[10px] px-5 py-[3px] h-[34px]
                          border-2 border-cta rounded-btn text-cta text-meta hover:bg-cta/10 transition-colors">
               <span className="w-[25px] h-[25px]"><LinkIcon /></span>
-              <span>{linkCopied ? "Скопировано" : "Ссылка"}</span>
+              <span>{linkCopied ? "Скопировано" : createLink.isPending ? "Создаём…" : "Ссылка-приглашение"}</span>
             </button>
             <button disabled title="В разработке"
               className="flex items-center gap-[10px] px-5 py-[3px] h-[34px]
