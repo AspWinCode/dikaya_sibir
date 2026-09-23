@@ -611,7 +611,14 @@ export const handlers = [
     return HttpResponse.json(filePolicy);
   }),
 
-  http.get(`${API}/users/me`, () => HttpResponse.json(MOCK_USER)),
+  // localStorage.mock_must_change_password = "1" simulates an invited user on a temp password
+  http.get(`${API}/users/me`, () =>
+    HttpResponse.json({ ...MOCK_USER, must_change_password: localStorage.getItem("mock_must_change_password") === "1" }),
+  ),
+  http.post(`${API}/auth/change-password`, () => {
+    localStorage.removeItem("mock_must_change_password");
+    return new HttpResponse(null, { status: 204 });
+  }),
 
   http.get(`${API}/apps`, () => {
     const page: CursorPage<App> = {
@@ -843,7 +850,12 @@ export const handlers = [
       roles: [],
     };
     mockUsers.push(newUser);
-    return HttpResponse.json(newUser, { status: 201 });
+    // Emails starting with "fail" simulate an SMTP delivery failure
+    const failed = body.email.startsWith("fail");
+    return HttpResponse.json(
+      { ...newUser, must_change_password: true, email_sent: !failed, temp_password: failed ? "Tmp-Mock-Pass-12" : null },
+      { status: 201 },
+    );
   }),
 
   // Invite links

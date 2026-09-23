@@ -197,7 +197,12 @@ class AuthService:
         await self._db.execute(
             update(User)
             .where(User.id == user_id)
-            .values(password_hash=new_hash, password_changed_at=changed_at, password_expires_at=expires_at)
+            .values(
+                password_hash=new_hash,
+                password_changed_at=changed_at,
+                password_expires_at=expires_at,
+                must_change_password=False,
+            )
         )
         await pps.record(user_id, new_hash)
         await self.logout_all(user_id)
@@ -230,7 +235,9 @@ class AuthService:
         await self._db.flush()
 
         reset_url = f"{settings.FRONTEND_URL}/reset-password?token={raw_token}"
-        await send_password_reset_email(to=user.email, display_name=user.display_name, reset_url=reset_url)
+        await send_password_reset_email(
+            to=user.email, display_name=user.display_name, reset_url=reset_url, db=self._db
+        )
         logger.info("password_reset_requested", user_id=str(user.id))
 
     async def reset_password(self, req: ResetPasswordRequest) -> None:
@@ -261,7 +268,12 @@ class AuthService:
         await self._db.execute(
             update(User)
             .where(User.id == reset_token.user_id)
-            .values(password_hash=new_hash, password_changed_at=changed_at, password_expires_at=expires_at)
+            .values(
+                password_hash=new_hash,
+                password_changed_at=changed_at,
+                password_expires_at=expires_at,
+                must_change_password=False,
+            )
         )
         await pps.record(reset_token.user_id, new_hash)
         await self._db.execute(
@@ -318,7 +330,10 @@ class AuthService:
         from app.services.session_policy import SessionPolicyService
 
         now = datetime.now(UTC)
-        access = create_access_token(user.id, user.role_ids, org_id=user.org_id, email=user.email)
+        access = create_access_token(
+            user.id, user.role_ids, org_id=user.org_id, email=user.email,
+            must_change_password=user.must_change_password,
+        )
         refresh = create_refresh_token(user.id)
 
         expires_at = datetime.fromtimestamp(

@@ -25,6 +25,8 @@ export interface CurrentUser {
   is_active: boolean;
   is_superuser: boolean;
   totp_enabled: boolean;
+  /** Temp (invite) password — user must set their own before using the app. */
+  must_change_password?: boolean;
   last_login_at: string | null;
   created_at: string;
   updated_at: string;

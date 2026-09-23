@@ -31,9 +31,15 @@ def _build_token(subject: str, extra: dict[str, Any], expire_delta: timedelta) -
 
 
 def create_access_token(
-    user_id: UUID, roles: list[str], org_id: UUID | None = None, email: str | None = None
+    user_id: UUID,
+    roles: list[str],
+    org_id: UUID | None = None,
+    email: str | None = None,
+    must_change_password: bool = False,
 ) -> str:
     extra: dict[str, Any] = {"type": "access", "roles": roles, "jti": str(_uuid.uuid4())}
+    if must_change_password:
+        extra["pwd_change"] = True
     if org_id is not None:
         extra["org_id"] = str(org_id)
     if email is not None:

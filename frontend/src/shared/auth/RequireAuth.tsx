@@ -6,6 +6,7 @@ import { useAuthStore } from "./store";
 export function RequireAuth({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const initializing = useAuthStore((s) => s.initializing);
+  const mustChangePassword = useAuthStore((s) => s.user?.must_change_password ?? false);
   const location = useLocation();
 
   if (initializing) {
@@ -18,6 +19,10 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   if (!isAuthenticated) {
     return <Navigate to="/signin" replace state={{ from: location.pathname }} />;
+  }
+
+  if (mustChangePassword) {
+    return <Navigate to="/change-password" replace />;
   }
 
   return <>{children}</>;

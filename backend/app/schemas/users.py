@@ -34,6 +34,7 @@ class UserRead(BaseModel):
     is_superuser: bool
     org_id: uuid.UUID | None = None
     totp_enabled: bool
+    must_change_password: bool = False
     last_login_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -74,6 +75,13 @@ class InviteUserRequest(BaseModel):
     email: EmailStr
     display_name: str = Field(min_length=2, max_length=256)
     roles: list[str] = Field(default_factory=list)
+
+
+class InviteUserResult(UserRead):
+    email_sent: bool
+    # Returned only when the invitation email could not be delivered,
+    # so the admin can pass the temp password on manually.
+    temp_password: str | None = None
 
 
 class AdminSetPasswordRequest(BaseModel):

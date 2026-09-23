@@ -12,8 +12,8 @@ async def send_email(
     subject: str,
     body_html: str,
     body_text: str | None = None,
-) -> None:
-    """Send a single email. Logs and swallows on error so callers don't break."""
+) -> bool:
+    """Send a single email. Logs and swallows errors; returns True on success."""
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
 
@@ -34,13 +34,16 @@ async def send_email(
             port=settings.SMTP_PORT,
             use_tls=use_ssl,
             start_tls=use_starttls,
+            timeout=20,
         ) as smtp:
             if settings.SMTP_USER and settings.SMTP_PASSWORD:
                 await smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             await smtp.send_message(msg)
         logger.info("email_sent", to=to, subject=subject)
-    except (SMTPException, OSError):
+        return True
+    except (SMTPException, OSError, TimeoutError):
         logger.exception("email_send_failed", to=to, subject=subject)
+        return False
 
 
 async def send_via_template(
@@ -51,15 +54,18 @@ async def send_via_template(
     fallback_subject: str = "",
     fallback_html: str = "",
     fallback_text: str | None = None,
-) -> None:
-    """Render a template by code and send. Falls back to inline content if template missing."""
-    from app.services.email_templates import EmailTemplateService
-    svc = EmailTemplateService(db)
-    rendered = await svc.render_by_code(code, context)
+) -> bool:
+    """Render a template by code and send. Falls back to inline content if the
+    template is missing or fails to render."""
+    from app.services.email_templates import EmailTemplateRenderError, EmailTemplateService
+    try:
+        rendered = await EmailTemplateService(db).render_by_code(code, context)
+    except EmailTemplateRenderError:
+        logger.exception("email_template_render_failed", code=code)
+        rendered = None
     if rendered:
-        await send_email(to, rendered.subject, rendered.body_html, rendered.body_text)
-    else:
-        await send_email(to, fallback_subject, fallback_html, fallback_text)
+        return await send_email(to, rendered.subject, rendered.body_html, rendered.body_text)
+    return await send_email(to, fallback_subject, fallback_html, fallback_text)
 
 
 async def send_password_reset_email(
@@ -67,15 +73,14 @@ async def send_password_reset_email(
     display_name: str,
     reset_url: str,
     db=None,
-) -> None:
+) -> bool:
     if db is not None:
-        await send_via_template(
+        return await send_via_template(
             db, "password_reset", to,
             {"display_name": display_name, "reset_url": reset_url},
             fallback_subject="Сброс пароля",
             fallback_html=f"<p>Здравствуйте, {display_name}!</p><p><a href=\"{reset_url}\">Сбросить пароль</a></p>",
         )
-        return
     subject = "Сброс пароля"
     html = (
         f"<p>Здравствуйте, {display_name}!</p>"
@@ -90,7 +95,7 @@ async def send_password_reset_email(
         "Ссылка действительна 1 час.\n"
         "Если вы не запрашивали сброс — проигнорируйте это письмо."
     )
-    await send_email(to, subject, html, text)
+    return await send_email(to, subject, html, text)
 
 
 async def send_invitation_email(
@@ -99,15 +104,14 @@ async def send_invitation_email(
     temp_password: str,
     platform_url: str = "http://localhost:5173/editor",
     db=None,
-) -> None:
+) -> bool:
     if db is not None:
-        await send_via_template(
+        return await send_via_template(
             db, "invitation", to,
             {"display_name": display_name, "email": to, "temp_password": temp_password, "platform_url": platform_url},
             fallback_subject="Приглашение на платформу",
             fallback_html=f"<p>Здравствуйте, {display_name}!</p><p>Email: {to}, пароль: {temp_password}</p>",
         )
-        return
     subject = "Приглашение на платформу"
     html = (
         f"<p>Здравствуйте, {display_name}!</p>"
@@ -123,4 +127,4 @@ async def send_invitation_email(
         f"Войдите: {platform_url}\n"
         "Смените пароль после первого входа."
     )
-    await send_email(to, subject, html, text)
+    return await send_email(to, subject, html, text)

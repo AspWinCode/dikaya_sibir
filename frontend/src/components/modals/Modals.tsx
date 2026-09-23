@@ -588,7 +588,16 @@ export function RolesModal({
           onSuccess: (newUser) => {
             addMember.mutate(
               { userId: newUser.id, role: "editor" },
-              { onSuccess: () => { setInviteEmail(""); setInviteError(""); } },
+              {
+                onSuccess: () => {
+                  setInviteEmail("");
+                  setInviteError(
+                    newUser.email_sent || !newUser.temp_password
+                      ? ""
+                      : `Письмо не отправлено. Передайте вручную: ${newUser.email} / ${newUser.temp_password}`,
+                  );
+                },
+              },
             );
           },
           onError: () => { setInviteError("Не удалось отправить приглашение"); },

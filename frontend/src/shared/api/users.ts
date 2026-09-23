@@ -81,8 +81,14 @@ export interface InviteUserRequest {
   roles: string[];
 }
 
-export async function inviteUser(body: InviteUserRequest): Promise<User> {
-  const { data } = await apiClient.post<User>("/users/invite", body);
+export interface InviteUserResult extends User {
+  email_sent: boolean;
+  /** Present only when the invitation email could not be delivered. */
+  temp_password: string | null;
+}
+
+export async function inviteUser(body: InviteUserRequest): Promise<InviteUserResult> {
+  const { data } = await apiClient.post<InviteUserResult>("/users/invite", body);
   return data;
 }
 

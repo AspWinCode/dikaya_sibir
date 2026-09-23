@@ -95,3 +95,44 @@ async def test_list_users_requires_admin_or_auditor(
     token = await _login(client, "viewer@example.com", "Viewer123!")
     resp = await client.get("/api/v1/users", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 403
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_invite_forces_password_change(
+    client: AsyncClient, admin_user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _fail_send(*_a: object, **_kw: object) -> bool:
+        return False
+
+    monkeypatch.setattr("app.services.email.send_email", _fail_send)
+    token = await _login(client, admin_user.email, "AdminPass1!")
+    resp = await client.post(
+        "/api/v1/users/invite",
+        json={"email": "invited@example.com", "display_name": "Invited"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    # Delivery failed → admin gets the temp password back
+    assert data["email_sent"] is False
+    temp = data["temp_password"]
+    assert temp and data["must_change_password"] is True
+
+    h = {"Authorization": f"Bearer {await _login(client, 'invited@example.com', temp)}"}
+    assert (await client.get("/api/v1/users/me", headers=h)).status_code == 200
+    blocked = await client.get("/api/v1/apps", headers=h)
+    assert blocked.status_code == 403
+    assert blocked.json()["detail"] == "Password change required"
+
+    r = await client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": temp, "new_password": "BrandNewPass123!"},
+        headers=h,
+    )
+    assert r.status_code == 204, r.text
+
+    h2 = {"Authorization": f"Bearer {await _login(client, 'invited@example.com', 'BrandNewPass123!')}"}
+    assert (await client.get("/api/v1/apps", headers=h2)).status_code == 200
+    me = (await client.get("/api/v1/users/me", headers=h2)).json()
+    assert me["must_change_password"] is False

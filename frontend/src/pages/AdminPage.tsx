@@ -645,6 +645,9 @@ export function InviteUserDialog({ onClose }: { onClose: () => void }) {
   const [roleOpen, setRoleOpen] = useState(false);
   const { data: rolesData } = useRoles();
   const invite = useInviteUser();
+  // Set when the invitation email could not be delivered
+  const [fallback, setFallback] = useState<{ email: string; password: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const roles = rolesData ?? [];
   const selectedRole = roles.find((r) => r.id === role);
@@ -654,7 +657,12 @@ export function InviteUserDialog({ onClose }: { onClose: () => void }) {
     if (!email || !name) return;
     invite.mutate(
       { email, display_name: name, roles: role ? [role] : [] },
-      { onSuccess: onClose },
+      {
+        onSuccess: (res) => {
+          if (res.email_sent || !res.temp_password) onClose();
+          else setFallback({ email: res.email, password: res.temp_password });
+        },
+      },
     );
   }
 
@@ -680,6 +688,39 @@ export function InviteUserDialog({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
+        {fallback ? (
+          <div className="flex flex-col gap-[16px] px-[30px] pb-[28px]">
+            <p className="text-[14px] text-[#8A5A00] bg-[#FFF6E0] rounded-[8px] px-3 py-2 leading-snug">
+              Пользователь создан, но письмо с приглашением отправить не удалось.
+              Передайте данные для входа самостоятельно — при первом входе система попросит сменить пароль.
+            </p>
+            <div className="flex flex-col gap-[6px] text-[15px] text-primary">
+              <span><span className="text-primary/60">Email:</span> {fallback.email}</span>
+              <span className="flex items-center gap-[10px]">
+                <span className="text-primary/60">Временный пароль:</span>
+                <code className="bg-mainbg rounded-[6px] px-2 py-[2px] select-all">{fallback.password}</code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(fallback.password).then(() => setCopied(true)).catch(() => {});
+                  }}
+                  className="text-[13px] text-cta underline"
+                >
+                  {copied ? "Скопировано" : "Копировать"}
+                </button>
+              </span>
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-[42px] px-[22px] bg-cta rounded-[20px] text-[15px] font-semibold text-white hover:bg-active transition-colors"
+              >
+                Готово
+              </button>
+            </div>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-[18px] px-[30px] pb-[28px]">
           {/* Email */}
           <div className="flex flex-col gap-[6px]">
@@ -786,6 +827,7 @@ export function InviteUserDialog({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

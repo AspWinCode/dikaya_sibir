@@ -12,6 +12,7 @@ from app.schemas.users import (
     AdminSetPasswordRequest,
     AuditLogRead,
     InviteUserRequest,
+    InviteUserResult,
     RoleRead,
     UserCreate,
     UserListParams,
@@ -69,34 +70,41 @@ async def create_user(body: UserCreate, current_user: AuthDep, db: DbDep) -> Use
 
 @router.post(
     "/invite",
-    response_model=UserRead,
+    response_model=InviteUserResult,
     status_code=status.HTTP_201_CREATED,
     summary="Invite user by email (sends invitation email with temp password)",
 )
-async def invite_user(body: InviteUserRequest, current_user: AuthDep, db: DbDep) -> UserRead:
+async def invite_user(body: InviteUserRequest, current_user: AuthDep, db: DbDep) -> InviteUserResult:
     if not current_user.has_role("platform_admin", "org_admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
     try:
-        svc = UserService(db)
-        user, temp_password = await svc.invite_user(
+        user, temp_password = await UserService(db).invite_user(
             body,
             granted_by=current_user.user_id,
             actor_email=getattr(current_user, "email", None),
             actor_org_id=current_user.org_id if current_user.is_org_admin else None,
         )
-        # Send invitation email (non-blocking — swallows errors)
-        import asyncio
-        from app.services.email import send_invitation_email
-        asyncio.ensure_future(
-            send_invitation_email(body.email, body.display_name, temp_password, settings.FRONTEND_URL)
-        )
-        return user
     except UserConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    # The user row is already flushed (constraint errors surfaced above). Sent
+    # synchronously so the admin learns the outcome and gets the temp password
+    # back if delivery failed.
+    from app.services.email import send_invitation_email
+    sent = await send_invitation_email(
+        body.email, body.display_name, temp_password, settings.FRONTEND_URL, db=db
+    )
+    if not sent:
+        logger.warning("invitation_email_not_sent", user_id=str(user.id), email=body.email)
+    return InviteUserResult(
+        **user.model_dump(),
+        email_sent=sent,
+        temp_password=None if sent else temp_password,
+    )
 
 
 @router.get("/me", response_model=UserRead, summary="Get current user profile")

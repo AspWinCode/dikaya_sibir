@@ -50,6 +50,15 @@ apiClient.interceptors.response.use(
     const url = original?.url ?? "";
     const isAuthRoute = url.includes("/auth/login") || url.includes("/auth/refresh");
 
+    // Temp (invite) password: backend blocks everything until it is changed.
+    const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail;
+    if (status === 403 && detail === "Password change required") {
+      if (!window.location.pathname.startsWith("/editor/change-password")) {
+        window.location.href = "/editor/change-password";
+      }
+      return Promise.reject(error);
+    }
+
     if (status !== 401 || isAuthRoute || !original) {
       return Promise.reject(error);
     }

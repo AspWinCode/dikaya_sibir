@@ -163,6 +163,7 @@ class UserService:
             display_name=data.display_name,
             password_hash=hash_password(temp_password),
             org_id=actor_org_id,
+            must_change_password=True,
         )
         self._db.add(user)
         await self._db.flush()

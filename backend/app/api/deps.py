@@ -2,7 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 import structlog
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,7 +40,17 @@ class CurrentUser:
         return "org_admin" in self.roles
 
 
-async def get_current_user(credentials: BearerDep) -> CurrentUser:
+# Endpoints still reachable while a password change is pending (temp password).
+_PWD_CHANGE_ALLOWED = (
+    "/api/v1/auth/change-password",
+    "/api/v1/auth/logout",
+    "/api/v1/auth/logout-all",
+    "/api/v1/auth/password-policy",
+    "/api/v1/users/me",
+)
+
+
+async def get_current_user(request: Request, credentials: BearerDep) -> CurrentUser:
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -56,6 +66,12 @@ async def get_current_user(credentials: BearerDep) -> CurrentUser:
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+
+    if payload.get("pwd_change") and request.url.path not in _PWD_CHANGE_ALLOWED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password change required",
+        )
 
     raw_org = payload.get("org_id")
     return CurrentUser(
