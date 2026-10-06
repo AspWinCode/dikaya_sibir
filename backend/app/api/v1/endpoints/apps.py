@@ -53,10 +53,8 @@ async def list_apps(
     search: str | None = Query(default=None),
     include_archived: bool = Query(default=False),
 ) -> CursorPage[AppRead]:
-    is_admin = current_user.has_role("platform_admin")
     return await AppService(db).list_apps(
         actor_id=current_user.user_id,
-        is_platform_admin=is_admin,
         cursor=cursor,
         limit=limit,
         search=search,
@@ -82,7 +80,6 @@ async def get_app(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> AppRea
     try:
         return await AppService(db).get_app(
             app_id, actor_id=current_user.user_id,
-            is_admin=current_user.has_role("platform_admin"),
         )
     except AppNotFoundError as exc:
         raise _not_found() from exc
@@ -101,7 +98,6 @@ async def update_app(
             return await AppService(db).update_app(
                 app_id, body,
                 actor_id=current_user.user_id,
-                is_admin=current_user.has_role("platform_admin"),
             )
     except LockConflictError as exc:
         raise HTTPException(
@@ -119,7 +115,6 @@ async def delete_app(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> Non
     try:
         await AppService(db).delete_app(
             app_id, actor_id=current_user.user_id,
-            is_admin=current_user.has_role("platform_admin"),
         )
     except AppNotFoundError as exc:
         raise _not_found() from exc
@@ -142,7 +137,6 @@ async def publish_app(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> Ap
     try:
         return await AppService(db).publish_app(
             app_id, actor_id=current_user.user_id,
-            is_admin=current_user.has_role("platform_admin"),
         )
     except AppNotFoundError as exc:
         raise _not_found() from exc
@@ -170,7 +164,6 @@ async def clone_app(
             body,
             owner_id=current_user.user_id,
             org_id=current_user.org_id,
-            is_admin=current_user.has_role("platform_admin"),
         )
     except AppNotFoundError as exc:
         raise _not_found() from exc
@@ -190,7 +183,6 @@ async def list_snapshots(
         return await AppService(db).list_snapshots(
             app_id,
             actor_id=current_user.user_id,
-            is_admin=current_user.has_role("platform_admin"),
         )
     except AppNotFoundError as exc:
         raise _not_found() from exc
@@ -207,7 +199,6 @@ async def create_snapshot(
             app_id,
             body,
             actor_id=current_user.user_id,
-            is_admin=current_user.has_role("platform_admin"),
         )
     except AppNotFoundError as exc:
         raise _not_found() from exc
@@ -227,7 +218,6 @@ async def rollback_snapshot(
             app_id,
             snapshot_num,
             actor_id=current_user.user_id,
-            is_admin=current_user.has_role("platform_admin"),
         )
     except AppNotFoundError as exc:
         raise _not_found() from exc
@@ -243,7 +233,6 @@ async def list_members(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> l
         return await AppService(db).list_members(
             app_id,
             actor_id=current_user.user_id,
-            is_admin=current_user.has_role("platform_admin"),
         )
     except AppNotFoundError as exc:
         raise _not_found() from exc
@@ -257,7 +246,6 @@ async def add_member(app_id: uuid.UUID, body: AppMemberAdd, current_user: AuthDe
         await AppService(db).add_member(
             app_id, body,
             actor_id=current_user.user_id,
-            is_admin=current_user.has_role("platform_admin"),
         )
     except AppNotFoundError as exc:
         raise _not_found() from exc
@@ -273,7 +261,6 @@ async def remove_member(
         await AppService(db).remove_member(
             app_id, user_id,
             actor_id=current_user.user_id,
-            is_admin=current_user.has_role("platform_admin"),
         )
     except AppNotFoundError as exc:
         raise _not_found() from exc
@@ -300,7 +287,6 @@ async def list_recycle_bin(
     try:
         await _svc(db).get_app(
             app_id, actor_id=current_user.user_id,
-            is_admin=current_user.has_role("platform_admin"),
         )
     except AppNotFoundError as exc:
         raise _not_found() from exc

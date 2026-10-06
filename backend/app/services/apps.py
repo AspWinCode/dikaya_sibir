@@ -74,18 +74,19 @@ class AppService:
     async def list_apps(
         self,
         actor_id: uuid.UUID,
-        is_platform_admin: bool,
         cursor: str | None = None,
         limit: int = 50,
         search: str | None = None,
         include_archived: bool = False,
         actor_org_id: uuid.UUID | None = None,
     ) -> CursorPage[AppRead]:
+        # Deliberately no platform_admin bypass: holding the platform_admin
+        # role manages the platform, not an automatic membership in every
+        # app. An app-level AppMember row (or org scoping) is required to
+        # see an app here, same as everyone else.
         stmt = select(App).order_by(App.created_at.asc(), App.id.asc())
 
-        if is_platform_admin:
-            pass
-        elif actor_org_id is not None:
+        if actor_org_id is not None:
             stmt = stmt.where(App.org_id == actor_org_id)
         else:
             stmt = stmt.where(
@@ -127,10 +128,9 @@ class AppService:
             has_more=has_more,
         )
 
-    async def get_app(self, app_id: uuid.UUID, actor_id: uuid.UUID, is_admin: bool) -> AppRead:
+    async def get_app(self, app_id: uuid.UUID, actor_id: uuid.UUID) -> AppRead:
         app = await self._fetch_app(app_id)
-        if not is_admin:
-            await self._require_member(app_id, actor_id)
+        await self._require_member(app_id, actor_id)
         return AppRead.model_validate(app)
 
     async def create_app(
@@ -161,11 +161,10 @@ class AppService:
         return AppRead.model_validate(app)
 
     async def update_app(
-        self, app_id: uuid.UUID, data: AppUpdate, actor_id: uuid.UUID, is_admin: bool
+        self, app_id: uuid.UUID, data: AppUpdate, actor_id: uuid.UUID
     ) -> AppRead:
         app = await self._fetch_app(app_id)
-        if not is_admin:
-            await self._require_role(app_id, actor_id, {"owner", "admin"})
+        await self._require_role(app_id, actor_id, {"owner", "admin"})
 
         if data.name is not None:
             app.name = data.name
@@ -185,10 +184,9 @@ class AppService:
         logger.info("app_updated", app_id=str(app_id))
         return AppRead.model_validate(app)
 
-    async def delete_app(self, app_id: uuid.UUID, actor_id: uuid.UUID, is_admin: bool) -> None:
+    async def delete_app(self, app_id: uuid.UUID, actor_id: uuid.UUID) -> None:
         app = await self._fetch_app(app_id)
-        if not is_admin:
-            await self._require_role(app_id, actor_id, {"owner"})
+        await self._require_role(app_id, actor_id, {"owner"})
         app.is_archived = True
         await self._db.flush()
         logger.info("app_archived", app_id=str(app_id))
@@ -201,11 +199,10 @@ class AppService:
         return await PublishValidationService(self._db).check(app_id)
 
     async def publish_app(
-        self, app_id: uuid.UUID, actor_id: uuid.UUID, is_admin: bool
+        self, app_id: uuid.UUID, actor_id: uuid.UUID
     ) -> AppRead:
         app = await self._fetch_app(app_id)
-        if not is_admin:
-            await self._require_role(app_id, actor_id, {"owner", "admin"})
+        await self._require_role(app_id, actor_id, {"owner", "admin"})
 
         from app.services.publish_validation import PublishValidationService
         check = await PublishValidationService(self._db).check(app_id)
@@ -228,11 +225,9 @@ class AppService:
         data: AppCloneCreate,
         owner_id: uuid.UUID,
         org_id: uuid.UUID | None,
-        is_admin: bool,
     ) -> AppRead:
         source = await self._fetch_app_with_entities(app_id)
-        if not is_admin:
-            await self._require_member(app_id, owner_id)
+        await self._require_member(app_id, owner_id)
 
         slug = data.slug or _slugify(data.name)
         existing = await self._db.execute(select(App).where(App.slug == slug))
@@ -342,11 +337,9 @@ class AppService:
         app_id: uuid.UUID,
         data: AppSnapshotCreate,
         actor_id: uuid.UUID,
-        is_admin: bool,
     ) -> AppSnapshotRead:
         app = await self._fetch_app_with_entities(app_id)
-        if not is_admin:
-            await self._require_role(app_id, actor_id, {"owner", "admin"})
+        await self._require_role(app_id, actor_id, {"owner", "admin"})
 
         # Next sequential snapshot number for this app
         num_result = await self._db.execute(
@@ -411,11 +404,10 @@ class AppService:
         return AppSnapshotRead.model_validate(snapshot)
 
     async def list_snapshots(
-        self, app_id: uuid.UUID, actor_id: uuid.UUID, is_admin: bool
+        self, app_id: uuid.UUID, actor_id: uuid.UUID
     ) -> list[AppSnapshotRead]:
         await self._fetch_app(app_id)
-        if not is_admin:
-            await self._require_member(app_id, actor_id)
+        await self._require_member(app_id, actor_id)
         result = await self._db.execute(
             select(AppSnapshot)
             .where(AppSnapshot.app_id == app_id)
@@ -428,11 +420,9 @@ class AppService:
         app_id: uuid.UUID,
         snapshot_num: int,
         actor_id: uuid.UUID,
-        is_admin: bool,
     ) -> AppRead:
         app = await self._fetch_app(app_id)
-        if not is_admin:
-            await self._require_role(app_id, actor_id, {"owner", "admin"})
+        await self._require_role(app_id, actor_id, {"owner", "admin"})
 
         snap_result = await self._db.execute(
             select(AppSnapshot).where(
@@ -506,11 +496,9 @@ class AppService:
         self,
         app_id: uuid.UUID,
         actor_id: uuid.UUID,
-        is_admin: bool,
     ) -> list[AppMemberRead]:
         await self._fetch_app(app_id)
-        if not is_admin:
-            await self._require_member(app_id, actor_id)
+        await self._require_member(app_id, actor_id)
         rows = await self._db.execute(
             select(AppMember, User)
             .join(User, User.id == AppMember.user_id)
@@ -533,11 +521,9 @@ class AppService:
         app_id: uuid.UUID,
         data: AppMemberAdd,
         actor_id: uuid.UUID,
-        is_admin: bool,
     ) -> None:
         await self._fetch_app(app_id)
-        if not is_admin:
-            await self._require_role(app_id, actor_id, {"owner", "admin"})
+        await self._require_role(app_id, actor_id, {"owner", "admin"})
 
         existing = await self._db.execute(
             select(AppMember).where(
@@ -563,10 +549,8 @@ class AppService:
         app_id: uuid.UUID,
         user_id: uuid.UUID,
         actor_id: uuid.UUID,
-        is_admin: bool,
     ) -> None:
-        if not is_admin:
-            await self._require_role(app_id, actor_id, {"owner", "admin"})
+        await self._require_role(app_id, actor_id, {"owner", "admin"})
         result = await self._db.execute(
             select(AppMember).where(
                 AppMember.app_id == app_id, AppMember.user_id == user_id

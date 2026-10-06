@@ -43,7 +43,7 @@ async def create_invite_link(
 ) -> InviteLinkCreated:
     try:
         return await InviteService(db).create_link(
-            app_id, body, actor_id=current_user.user_id, is_admin=current_user.has_role("platform_admin")
+            app_id, body, actor_id=current_user.user_id
         )
     except AppNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="App not found") from exc
@@ -55,7 +55,7 @@ async def create_invite_link(
 async def list_invite_links(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> list[InviteLinkRead]:
     try:
         return await InviteService(db).list_links(
-            app_id, actor_id=current_user.user_id, is_admin=current_user.has_role("platform_admin")
+            app_id, actor_id=current_user.user_id
         )
     except AppNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="App not found") from exc
@@ -73,7 +73,7 @@ async def revoke_invite_link(
 ) -> None:
     try:
         await InviteService(db).revoke_link(
-            app_id, link_id, actor_id=current_user.user_id, is_admin=current_user.has_role("platform_admin")
+            app_id, link_id, actor_id=current_user.user_id
         )
     except AppNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="App not found") from exc

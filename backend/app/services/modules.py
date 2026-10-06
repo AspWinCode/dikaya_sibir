@@ -266,10 +266,9 @@ class ModuleService:
         app_id: uuid.UUID,
         module_code: str,
         actor_id: uuid.UUID,
-        is_admin: bool,
         _seen: set[str] | None = None,
     ) -> ModuleInstallResult:
-        await self._require_app_role(app_id, actor_id, is_admin)
+        await self._require_app_role(app_id, actor_id)
         module = await self._module_by_code(module_code)
         version = await self._current_version(module.id)
         if version is None:
@@ -282,7 +281,7 @@ class ModuleService:
 
         installed_dependencies: list[str] = []
         for dep_code in await self._dependency_codes(module.id):
-            dep_result = await self.install_module(app_id, dep_code, actor_id, is_admin, seen)
+            dep_result = await self.install_module(app_id, dep_code, actor_id, seen)
             installed_dependencies.append(dep_result.module.code)
             installed_dependencies.extend(dep_result.installed_dependencies)
 
@@ -315,9 +314,9 @@ class ModuleService:
         )
 
     async def uninstall_module(
-        self, app_id: uuid.UUID, module_code: str, actor_id: uuid.UUID, is_admin: bool
+        self, app_id: uuid.UUID, module_code: str, actor_id: uuid.UUID
     ) -> None:
-        await self._require_app_role(app_id, actor_id, is_admin)
+        await self._require_app_role(app_id, actor_id)
         module = await self._module_by_code(module_code)
 
         dependents = await self._installed_dependents(app_id, module.id)
@@ -600,12 +599,10 @@ class ModuleService:
         )).scalars().all()
         return list(rows)
 
-    async def _require_app_role(self, app_id: uuid.UUID, actor_id: uuid.UUID, is_admin: bool) -> None:
+    async def _require_app_role(self, app_id: uuid.UUID, actor_id: uuid.UUID) -> None:
         app_exists = (await self._db.execute(select(App.id).where(App.id == app_id))).scalar_one_or_none()
         if app_exists is None:
             raise ModuleNotFoundError("app")
-        if is_admin:
-            return
         member = (await self._db.execute(
             select(AppMember).where(AppMember.app_id == app_id, AppMember.user_id == actor_id)
         )).scalar_one_or_none()

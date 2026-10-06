@@ -61,3 +61,19 @@ async def client(db_session: AsyncSession) -> AsyncClient:
     ) as c:
         yield c
     app.dependency_overrides.clear()
+
+    # app.core.redis caches its client in a module-level global, bound to
+    # whichever event loop first touched it — same problem the test_engine
+    # fixture above works around for asyncpg. Only the first test in the
+    # process to exercise a Redis-backed path (e.g. the app edit-lock) would
+    # ever hit this, and only by luck of ordering: any later test, running in
+    # its own fresh event loop, gets "RuntimeError: Event loop is closed" the
+    # moment it tries to use the cached connection. Reset it after every test.
+    import app.core.redis as _redis_module
+
+    if _redis_module._redis is not None:
+        try:
+            await _redis_module._redis.aclose()
+        except Exception:
+            pass
+        _redis_module._redis = None

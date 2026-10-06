@@ -78,7 +78,6 @@ class TemplateService:
         app_id: uuid.UUID,
         template_id: str,
         actor_id: uuid.UUID | None = None,
-        is_admin: bool = True,
     ) -> dict[str, Any]:
         template = self._get(template_id)
         module_service = ModuleService(self._db)
@@ -93,7 +92,6 @@ class TemplateService:
                 app_id=app_id,
                 module_code=module_code,
                 actor_id=actor_id or uuid.UUID(int=0),
-                is_admin=is_admin,
             )
             modules_installed.append(result.module.code)
             modules_installed.extend(result.installed_dependencies)

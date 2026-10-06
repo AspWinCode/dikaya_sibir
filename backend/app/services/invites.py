@@ -54,16 +54,15 @@ class InviteService:
 
     # ---- Management (app owner/admin) ----
 
-    async def _require_manager(self, app_id: uuid.UUID, actor_id: uuid.UUID, is_admin: bool) -> None:
+    async def _require_manager(self, app_id: uuid.UUID, actor_id: uuid.UUID) -> None:
         apps = AppService(self._db)
         await apps._fetch_app(app_id)
-        if not is_admin:
-            await apps._require_role(app_id, actor_id, {"owner", "admin"})
+        await apps._require_role(app_id, actor_id, {"owner", "admin"})
 
     async def create_link(
-        self, app_id: uuid.UUID, data: InviteLinkCreate, actor_id: uuid.UUID, is_admin: bool
+        self, app_id: uuid.UUID, data: InviteLinkCreate, actor_id: uuid.UUID
     ) -> InviteLinkCreated:
-        await self._require_manager(app_id, actor_id, is_admin)
+        await self._require_manager(app_id, actor_id)
         token = secrets.token_urlsafe(32)
         link = AppInviteLink(
             app_id=app_id,
@@ -88,8 +87,8 @@ class InviteService:
         )
         return InviteLinkCreated(**InviteLinkRead.model_validate(link).model_dump(), token=token)
 
-    async def list_links(self, app_id: uuid.UUID, actor_id: uuid.UUID, is_admin: bool) -> list[InviteLinkRead]:
-        await self._require_manager(app_id, actor_id, is_admin)
+    async def list_links(self, app_id: uuid.UUID, actor_id: uuid.UUID) -> list[InviteLinkRead]:
+        await self._require_manager(app_id, actor_id)
         rows = await self._db.execute(
             select(AppInviteLink)
             .where(
@@ -103,9 +102,9 @@ class InviteService:
         return [InviteLinkRead.model_validate(r) for r in rows.scalars().all()]
 
     async def revoke_link(
-        self, app_id: uuid.UUID, link_id: uuid.UUID, actor_id: uuid.UUID, is_admin: bool
+        self, app_id: uuid.UUID, link_id: uuid.UUID, actor_id: uuid.UUID
     ) -> None:
-        await self._require_manager(app_id, actor_id, is_admin)
+        await self._require_manager(app_id, actor_id)
         link = (
             await self._db.execute(
                 select(AppInviteLink).where(AppInviteLink.id == link_id, AppInviteLink.app_id == app_id)

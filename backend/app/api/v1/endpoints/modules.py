@@ -39,7 +39,6 @@ async def install_module(
             app_id,
             module_code,
             actor_id=current_user.user_id,
-            is_admin=current_user.has_role("platform_admin"),
         )
     except ModuleNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -59,7 +58,6 @@ async def uninstall_module(
             app_id,
             module_code,
             actor_id=current_user.user_id,
-            is_admin=current_user.has_role("platform_admin"),
         )
     except ModuleDependencyError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

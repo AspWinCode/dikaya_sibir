@@ -32,10 +32,7 @@ class InstallResult(BaseModel):
 
 async def _check_app(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> None:
     try:
-        await AppService(db).get_app(
-            app_id, actor_id=current_user.user_id,
-            is_admin=current_user.has_role("platform_admin"),
-        )
+        await AppService(db).get_app(app_id, actor_id=current_user.user_id)
     except AppNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="App not found") from exc
 
@@ -73,7 +70,6 @@ async def install_template(
             app_id=app_id,
             template_id=template_id,
             actor_id=current_user.user_id,
-            is_admin=current_user.has_role("platform_admin"),
         )
     except TemplateNotFoundError as exc:
         raise HTTPException(

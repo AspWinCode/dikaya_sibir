@@ -34,9 +34,8 @@ async def _check_app_access(
     app_id: uuid.UUID, current_user: AuthDep, db: DbDep, require_role: set[str] | None = None
 ) -> None:
     """Verify caller can access the app; optionally require specific member role."""
-    is_admin = current_user.has_role("platform_admin")
     try:
-        await AppService(db).get_app(app_id, actor_id=current_user.user_id, is_admin=is_admin)
+        await AppService(db).get_app(app_id, actor_id=current_user.user_id)
     except AppNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="App not found") from exc
 
