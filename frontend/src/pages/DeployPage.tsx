@@ -12,6 +12,7 @@ import { useActiveApp } from "@/shared/hooks/useActiveApp";
 import { usePages, usePublishPage, useUnpublishPage } from "@/shared/hooks/usePages";
 import { useExportFilingCases } from "@/shared/hooks/useDocuments";
 import type { ExportFormat } from "@/shared/api/documents";
+import { getFriendlyErrorMessage } from "@/shared/lib/errorMessage";
 
 type DeploySection = "publish" | "versions" | "pages" | "monitoring";
 
@@ -91,8 +92,9 @@ export function DeployPage() {
 
           <div className="border-t border-cardbg">
             <button
-              onClick={() => navigate("/preview")}
-              className="w-full flex items-center gap-2 px-5 py-3 text-[13px] text-cta hover:bg-mainbg transition-colors font-medium"
+              onClick={() => navigate(app ? `/preview?app=${app.id}` : "/preview")}
+              disabled={!app}
+              className="w-full flex items-center gap-2 px-5 py-3 text-[13px] text-cta hover:bg-mainbg transition-colors font-medium disabled:opacity-50 disabled:cursor-default"
             >
               <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4" stroke="currentColor" strokeWidth="1.5">
                 <path d="M8 3C4 3 1 8 1 8s3 5 7 5 7-5 7-5-3-5-7-5z" />
@@ -121,6 +123,7 @@ export function DeployPage() {
             onPublish={handlePublish}
             publishing={publishMutation.isPending}
             publishError={publishMutation.error}
+            publishSucceeded={publishMutation.isSuccess}
           />
         )}
         {active === "versions"   && <VersionsSection appId={app?.id} />}
@@ -140,11 +143,13 @@ function PublishSection({
   onPublish,
   publishing,
   publishError,
+  publishSucceeded,
 }: {
   app: { id: string; name: string; is_published: boolean; version: number } | undefined;
   onPublish: () => void;
   publishing: boolean;
   publishError: unknown;
+  publishSucceeded: boolean;
 }) {
   const navigate = useNavigate();
   const exportM = useExportFilingCases(app?.id ?? "");
@@ -164,6 +169,14 @@ function PublishSection({
   const issues = checkQ.data?.issues ?? fallbackIssues;
   const canPublish = checkQ.data ? checkQ.data.can_publish : true; // don't block on a still-loading check
   const hasErrors = issues.some((i) => i.severity === "error");
+
+  // A 422 with issues is already explained by the checklist above; anything
+  // else (network down, 403, 500…) needs its own generic message so the
+  // user isn't left guessing why the button went back to "Опубликовать".
+  const genericPublishError =
+    publishError && fallbackIssues.length === 0
+      ? getFriendlyErrorMessage(publishError, { fallback: "Не удалось опубликовать приложение" })
+      : null;
 
   const checks = checkQ.isLoading
     ? [{ label: "Проверка целостности приложения…", status: "info" as const }]
@@ -276,6 +289,18 @@ function PublishSection({
         </p>
       )}
 
+      {genericPublishError && (
+        <p className="text-[13px] text-mistake mb-[12px]" role="alert">
+          {genericPublishError}
+        </p>
+      )}
+
+      {!publishing && !genericPublishError && publishSucceeded && (
+        <p className="text-[13px] text-green-700 mb-[12px]">
+          Приложение успешно опубликовано
+        </p>
+      )}
+
       {/* Action */}
       <div className="flex items-center gap-[12px]">
         <button
@@ -288,8 +313,9 @@ function PublishSection({
           {publishing ? "Публикация…" : app?.is_published ? "Переопубликовать" : "Опубликовать"}
         </button>
         <button
-          onClick={() => void 0}
-          className="h-[40px] px-[16px] border border-cardbg bg-white text-[14px] text-primary rounded-btn hover:border-cta hover:text-cta transition-colors"
+          onClick={() => app && navigate(`/preview?app=${app.id}`)}
+          disabled={!app}
+          className="h-[40px] px-[16px] border border-cardbg bg-white text-[14px] text-primary rounded-btn hover:border-cta hover:text-cta transition-colors disabled:opacity-50 disabled:cursor-default"
         >
           Предпросмотр
         </button>
