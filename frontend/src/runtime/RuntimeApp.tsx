@@ -775,7 +775,7 @@ function InlineSections({ appId, parentEntityId, parentRecordId, relations, enti
   );
 }
 
-function InlineBlock({ appId, entity, relation, parentRecordId, inlineTitle, accent, colors, entities, relations }: {
+export function InlineBlock({ appId, entity, relation, parentRecordId, inlineTitle, accent, colors, entities, relations }: {
   appId: string; entity: EntityRead; relation: RelationRead; parentRecordId: string;
   inlineTitle: string; accent: string; colors: AppColors;
   entities: EntityRead[]; relations: RelationRead[];
@@ -796,6 +796,59 @@ function InlineBlock({ appId, entity, relation, parentRecordId, inlineTitle, acc
 
   const cols = (entity.fields ?? []).filter((f) => !f.is_system);
 
+  const qc = useQueryClient();
+  const [editRowId, setEditRowId] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  function invalidate() {
+    qc.invalidateQueries({ queryKey: ["rt-records-inline", appId, entity.id, fkName, parentRecordId] });
+  }
+
+  function startEdit(rec: RecordRead) {
+    const vals: Record<string, string> = {};
+    cols.forEach((f) => {
+      vals[f.name] = rec.payload[f.name] != null ? String(rec.payload[f.name]) : "";
+    });
+    setEditValues(vals);
+    setEditRowId(rec.id);
+  }
+  function cancelEdit() { setEditRowId(null); setEditValues({}); }
+
+  async function saveEdit() {
+    if (!editRowId) return;
+    setSaving(true);
+    try {
+      const payload: Record<string, unknown> = {};
+      cols.forEach((f) => {
+        const v = editValues[f.name];
+        if (v !== undefined) {
+          if (f.field_type === "number" || f.field_type === "decimal" || f.field_type === "currency") payload[f.name] = v === "" ? null : Number(v);
+          else if (f.field_type === "boolean") payload[f.name] = v === "true";
+          else payload[f.name] = v === "" ? null : v;
+        }
+      });
+      await updateRecord(appId, entity.id, editRowId, { payload });
+      invalidate();
+    } finally {
+      setSaving(false);
+      setEditRowId(null);
+      setEditValues({});
+    }
+  }
+
+  async function handleDelete(rec: RecordRead) {
+    if (!window.confirm("Удалить запись без возможности восстановления?")) return;
+    setDeletingId(rec.id);
+    try {
+      await deleteRecord(appId, entity.id, rec.id);
+      invalidate();
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <section style={{ border: `1px solid ${colors.border}`, borderRadius: 10, overflow: "hidden", background: colors.surface }}>
       <div style={{ padding: "8px 14px", background: colors.bg, fontWeight: 600, fontSize: 14, display: "flex", justifyContent: "space-between", alignItems: "center", color: colors.text }}>
@@ -812,12 +865,58 @@ function InlineBlock({ appId, entity, relation, parentRecordId, inlineTitle, acc
               {cols.map((f) => (
                 <th key={f.id} style={{ textAlign: "left", padding: "6px 12px", fontWeight: 600, color: colors.textMuted, whiteSpace: "nowrap" }}>{f.display_name}</th>
               ))}
+              <th style={{ padding: "6px 12px", width: 64 }} />
             </tr>
           </thead>
           <tbody>
-            {records.map((rec) => (
+            {records.map((rec) => {
+              const isEditing = editRowId === rec.id;
+              return (
               <tr key={rec.id} style={{ borderBottom: `1px solid ${colors.border}` }}>
                 {cols.map((f) => {
+                  if (isEditing) {
+                    if (f.field_type === "select" || f.field_type === "multi_select") {
+                      return (
+                        <td key={f.id} style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
+                          <select
+                            value={editValues[f.name] ?? ""}
+                            onChange={(e) => setEditValues((v) => ({ ...v, [f.name]: e.target.value }))}
+                            style={{ height: 26, padding: "0 4px", fontSize: 12, border: `1px solid ${colors.border}`, borderRadius: 4, background: colors.bg, color: colors.text, outline: "none", minWidth: 80 }}
+                          >
+                            <option value="">—</option>
+                            {normalizeChoices(f.field_options?.choices).map((c) => (
+                              <option key={c.value} value={c.value}>{c.label}</option>
+                            ))}
+                          </select>
+                        </td>
+                      );
+                    }
+                    if (f.field_type === "relation") {
+                      const relTargetId = resolveRelationTargetEntityId(f, entity.id, relations);
+                      return (
+                        <td key={f.id} style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
+                          <RelationSelect
+                            appId={appId}
+                            targetEntityId={relTargetId}
+                            entities={entities}
+                            value={editValues[f.name] ?? ""}
+                            style={{ height: 26, padding: "0 6px", fontSize: 12, border: `1px solid ${colors.border}`, borderRadius: 4, background: colors.bg, color: colors.text, outline: "none", minWidth: 140 }}
+                            onChange={(v) => setEditValues((val) => ({ ...val, [f.name]: v }))}
+                          />
+                        </td>
+                      );
+                    }
+                    return (
+                      <td key={f.id} style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
+                        <input
+                          value={editValues[f.name] ?? ""}
+                          onChange={(e) => setEditValues((v) => ({ ...v, [f.name]: e.target.value }))}
+                          type={f.field_type === "number" || f.field_type === "decimal" || f.field_type === "currency" ? "number" : "text"}
+                          style={{ height: 26, padding: "0 6px", fontSize: 12, border: `1px solid ${colors.border}`, borderRadius: 4, background: colors.bg, color: colors.text, outline: "none", minWidth: 80 }}
+                        />
+                      </td>
+                    );
+                  }
                   if (f.field_type === "relation") {
                     const relTargetId = resolveRelationTargetEntityId(f, entity.id, relations);
                     return (
@@ -837,10 +936,48 @@ function InlineBlock({ appId, entity, relation, parentRecordId, inlineTitle, acc
                     </td>
                   );
                 })}
+                <td style={{ padding: "6px 12px", width: 64 }}>
+                  {isEditing ? (
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button
+                        disabled={saving}
+                        onClick={() => void saveEdit()}
+                        style={{ height: 22, padding: "0 6px", fontSize: 11, background: accent ?? "#00205F", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
+                      >
+                        {saving ? "…" : "✓"}
+                      </button>
+                      <button
+                        onClick={cancelEdit}
+                        style={{ height: 22, padding: "0 6px", fontSize: 11, background: colors.border, color: colors.text, border: "none", borderRadius: 4, cursor: "pointer" }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button
+                        onClick={() => startEdit(rec)}
+                        title="Редактировать"
+                        style={{ height: 22, padding: "0 6px", fontSize: 11, background: "transparent", color: colors.textMuted, border: `1px solid ${colors.border}`, borderRadius: 4, cursor: "pointer", opacity: 0.6 }}
+                      >
+                        ✎
+                      </button>
+                      <button
+                        disabled={deletingId === rec.id}
+                        onClick={() => void handleDelete(rec)}
+                        title="Удалить"
+                        style={{ height: 22, padding: "0 6px", fontSize: 11, background: "transparent", color: "#B91C1C", border: `1px solid ${colors.border}`, borderRadius: 4, cursor: "pointer", opacity: deletingId === rec.id ? 0.4 : 0.7 }}
+                      >
+                        {deletingId === rec.id ? "…" : "🗑"}
+                      </button>
+                    </div>
+                  )}
+                </td>
               </tr>
-            ))}
+              );
+            })}
             {records.length === 0 && (
-              <tr><td colSpan={cols.length || 1} style={{ padding: 12, color: colors.textMuted }}>Нет связанных записей</td></tr>
+              <tr><td colSpan={(cols.length || 1) + 1} style={{ padding: 12, color: colors.textMuted }}>Нет связанных записей</td></tr>
             )}
           </tbody>
         </table>
@@ -1213,7 +1350,7 @@ function TableBlock({ appId, entities, relations, title, entityId, visibleSystem
         if (f.is_system) return;
         const v = editValues[f.name];
         if (v !== undefined) {
-          if (f.field_type === "number" || f.field_type === "decimal") payload[f.name] = v === "" ? null : Number(v);
+          if (f.field_type === "number" || f.field_type === "decimal" || f.field_type === "currency") payload[f.name] = v === "" ? null : Number(v);
           else if (f.field_type === "boolean") payload[f.name] = v === "true";
           else payload[f.name] = v === "" ? null : v;
         }
@@ -1312,6 +1449,7 @@ function TableBlock({ appId, entities, relations, title, entityId, visibleSystem
                           <input
                             value={editValues[f.name] ?? ""}
                             onChange={(e) => setEditValues((v) => ({ ...v, [f.name]: e.target.value }))}
+                            type={f.field_type === "number" || f.field_type === "decimal" || f.field_type === "currency" ? "number" : "text"}
                             style={{ height: 26, padding: "0 6px", fontSize: 12, border: `1px solid ${colors.border}`, borderRadius: 4, background: colors.bg, color: colors.text, outline: "none", minWidth: 80 }}
                           />
                         </td>
@@ -3098,7 +3236,7 @@ function DataView({ viewType, entity, cols, records, accent, colors, columnWidth
         if (f.is_system) return;
         const v = editValues[f.name];
         if (v !== undefined) {
-          if (f.field_type === "number" || f.field_type === "decimal") payload[f.name] = v === "" ? null : Number(v);
+          if (f.field_type === "number" || f.field_type === "decimal" || f.field_type === "currency") payload[f.name] = v === "" ? null : Number(v);
           else if (f.field_type === "boolean") payload[f.name] = v === "true";
           else payload[f.name] = v === "" ? null : v;
         }
@@ -3994,6 +4132,10 @@ function formatCell(value: unknown, field: FieldRead): string {
   if (field.field_type === "currency") {
     const num = Number(value);
     if (!isNaN(num)) return num.toLocaleString("ru-RU") + " ₽";
+  }
+  if (field.field_type === "decimal" || field.field_type === "number") {
+    const num = Number(value);
+    if (!isNaN(num)) return num.toLocaleString("ru-RU");
   }
   if (field.field_type === "formula") {
     if (typeof value === "boolean") return value ? "✓" : "✗";

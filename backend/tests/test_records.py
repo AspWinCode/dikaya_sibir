@@ -608,6 +608,45 @@ async def test_required_field_validation(client: AsyncClient, builder: User) -> 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_currency_field_rejects_non_numeric_value(client: AsyncClient, builder: User) -> None:
+    """A `currency` field used to fall through validation with no type check
+    at all (only "number"/"decimal" were validated) — a non-numeric value
+    must be rejected just like for "decimal"."""
+    token = await _login(client, builder.email, "Build1234!")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    import uuid
+    slug = f"rec-app-{uuid.uuid4().hex[:6]}"
+    app = await client.post("/api/v1/apps", json={"slug": slug, "name": "Currency App"}, headers=headers)
+    app_id = app.json()["id"]
+    entity = await client.post(
+        f"/api/v1/apps/{app_id}/entities", json={"slug": "op", "display_name": "Operation"}, headers=headers,
+    )
+    entity_id = entity.json()["id"]
+    await client.post(
+        f"/api/v1/apps/{app_id}/entities/{entity_id}/fields",
+        json={"name": "cost", "display_name": "Cost", "field_type": "currency"},
+        headers=headers,
+    )
+
+    bad = await client.post(
+        f"/api/v1/apps/{app_id}/entities/{entity_id}/records",
+        json={"payload": {"cost": "not-a-number"}},
+        headers=headers,
+    )
+    assert bad.status_code == 422
+
+    good = await client.post(
+        f"/api/v1/apps/{app_id}/entities/{entity_id}/records",
+        json={"payload": {"cost": 1500.50}},
+        headers=headers,
+    )
+    assert good.status_code == 201
+    assert good.json()["payload"]["cost"] == 1500.50
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_unknown_field_validation(client: AsyncClient, builder: User) -> None:
     token = await _login(client, builder.email, "Build1234!")
     app_id, entity_id = await _setup_entity(client, token)

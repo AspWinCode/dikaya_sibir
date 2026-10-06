@@ -270,7 +270,7 @@ def _check_field_value(field: Field, name: str, value: Any, rules: dict) -> None
         if ft == "email" and "@" not in value:
             raise RecordValidationError(f"Field '{name}' is not a valid email")
 
-    elif ft in ("number", "decimal"):
+    elif ft in ("number", "decimal", "currency"):
         if not isinstance(value, (int, float)):
             try:
                 float(value)
