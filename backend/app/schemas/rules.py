@@ -192,9 +192,19 @@ class SetFieldAction(BaseModel):
 
 
 class CreateRecordAction(BaseModel):
+    """`match`/`increment` turn this into a generic upsert: if a record in
+    `entity_id` already matches every `match` field (exact equality, after
+    expression evaluation), its `increment` fields are added to (numeric
+    delta — negative to subtract) instead of creating a new record. Without
+    `match`, behaves exactly as before — always creates. This is the
+    building block for "running balance" entities (e.g. a Product×Location
+    stock table fed by receipt/transfer records) without a bespoke action
+    type or app-specific code — see ТЗ item 13."""
     type: Literal["create_record"]
     entity_id: uuid.UUID
     payload: dict[str, Any] = Field(default_factory=dict)
+    match: dict[str, Any] | None = None
+    increment: dict[str, Any] | None = None
 
 
 class UpdateRecordAction(BaseModel):

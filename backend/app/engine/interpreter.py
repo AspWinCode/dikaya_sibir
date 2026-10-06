@@ -181,10 +181,28 @@ def _execute_action(
                 k: evaluate(v, ctx.record) if isinstance(v, dict) else v
                 for k, v in action.get("payload", {}).items()
             }
-            result.records_to_create.append({
+            entry: dict[str, Any] = {
                 "entity_id": action.get("entity_id"),
                 "payload": payload,
-            })
+            }
+            # `match`/`increment` make this an upsert — see CreateRecordAction's
+            # docstring. Evaluated the same way as `payload` (literals or
+            # expressions over the triggering record), then handed to the
+            # sandbox worker's persistence step, which does the actual DB
+            # find-or-increment (this interpreter stays DB-free by design).
+            match = action.get("match")
+            if match:
+                entry["match"] = {
+                    k: evaluate(v, ctx.record) if isinstance(v, dict) else v
+                    for k, v in match.items()
+                }
+            increment = action.get("increment")
+            if increment:
+                entry["increment"] = {
+                    k: evaluate(v, ctx.record) if isinstance(v, dict) else v
+                    for k, v in increment.items()
+                }
+            result.records_to_create.append(entry)
 
         case "update_record":
             id_field = action.get("record_id_field", "id")

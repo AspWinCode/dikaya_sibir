@@ -123,6 +123,30 @@ def _persist_batch(batch: BatchResult, ctx: ExecutionContext, execution_batch_id
             for rec_create in batch.records_to_create:
                 entity_id_str = rec_create.get("entity_id")
                 target_entity = uuid.UUID(entity_id_str) if entity_id_str else ctx.entity_id
+                match = rec_create.get("match")
+                if match:
+                    # Upsert: `match` narrows to the record(s) this logically
+                    # is (e.g. {product_field: X, location_field: Y} for a
+                    # running-balance table) — exact-equality JSONB lookup,
+                    # same pattern already used in records.py. On a hit, add
+                    # `increment` deltas to the existing numeric fields
+                    # instead of creating a duplicate row; on a miss, create
+                    # one seeded with `payload`.
+                    stmt = select(Record).where(
+                        Record.entity_id == target_entity,
+                        Record.is_deleted.is_(False),
+                        *[Record.payload[k].astext == str(v) for k, v in match.items()],
+                    )
+                    existing = (await session.execute(stmt)).scalars().first()
+                    if existing:
+                        increment = rec_create.get("increment") or {}
+                        new_payload = dict(existing.payload)
+                        for k, delta in increment.items():
+                            new_payload[k] = (new_payload.get(k) or 0) + delta
+                        existing.payload = new_payload
+                        existing.updated_by = ctx.actor_id
+                        existing.version += 1
+                        continue
                 session.add(Record(
                     entity_id=target_entity,
                     payload=rec_create.get("payload", {}),
