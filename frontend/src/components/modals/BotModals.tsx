@@ -1,81 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { Overlay, CloseBtn, BlueField, ModalButtons, ModalError } from "./primitives";
 
-/* ─────────────────────────────────────────────────
-   LOCAL PRIMITIVES (mirrored from Modals.tsx)
-───────────────────────────────────────────────── */
-
-function Overlay({
-  onClose,
-  children,
-}: {
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <div
-      className="absolute inset-0 z-50 flex items-center justify-center"
-      style={{ background: "rgba(0, 32, 95, 0.5)" }}
-      onClick={onClose}
-    >
-      <div
-        className="bg-mainbg rounded-[10px] shadow-[0_4px_4px_rgba(0,0,0,0.25)] overflow-visible"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function CloseBtn({ onClick }: { onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="w-7 h-7 shrink-0 hover:opacity-70 transition-opacity">
-      <svg viewBox="0 0 28 28" fill="none" className="w-full h-full">
-        <line x1="7" y1="7" x2="21" y2="21" stroke="#00205F" strokeWidth="2" strokeLinecap="round" />
-        <line x1="21" y1="7" x2="7" y2="21" stroke="#00205F" strokeWidth="2" strokeLinecap="round" />
-      </svg>
-    </button>
-  );
-}
-
-function BlueField({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={cn("w-full h-[41px] bg-cardbg rounded-btn flex items-center px-5 relative", className)}>
-      {children}
-    </div>
-  );
-}
-
-function ModalButtons({
-  onCancel,
-  onConfirm,
-  confirmLabel,
-  disabled,
-}: {
-  onCancel: () => void;
-  onConfirm: () => void;
-  confirmLabel: string;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="flex justify-end gap-[10px]">
-      <button
-        onClick={onCancel}
-        className="px-5 py-[3px] h-[34px] border-2 border-cta rounded-btn text-cta text-meta hover:bg-cta/10 transition-colors"
-      >
-        Отмена
-      </button>
-      <button
-        onClick={onConfirm}
-        disabled={disabled}
-        className="px-5 py-[3px] h-[34px] bg-cta border-2 border-cta rounded-btn text-white text-meta hover:bg-active transition-colors disabled:opacity-60 disabled:cursor-default"
-      >
-        {confirmLabel}
-      </button>
-    </div>
-  );
-}
+export { Overlay, CloseBtn, BlueField, ModalButtons, ModalError };
 
 /* ── Toggle ── */
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {

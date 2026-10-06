@@ -14,9 +14,7 @@ export function StatusBanner() {
           textAlign: "center",
         }}
       >
-        {isError
-          ? "Backend недоступен"
-          : `API недоступен: ${JSON.stringify({ database: data?.database, redis: data?.redis })}`}
+        {isError ? "Сервер недоступен." : "Сервис временно недоступен. Попробуйте обновить страницу."}
       </div>
     );
   }

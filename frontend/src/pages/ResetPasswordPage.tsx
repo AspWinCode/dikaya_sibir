@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { isAxiosError } from "axios";
 import { apiClient } from "@/shared/api/client";
 import { PasswordInput } from "@/shared/components/PasswordInput";
+import { getFriendlyErrorMessage } from "@/shared/lib/errorMessage";
 
 export function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -30,12 +30,14 @@ export function ResetPasswordPage() {
       setDone(true);
       setTimeout(() => navigate("/signin", { replace: true }), 3000);
     } catch (err) {
-      if (isAxiosError(err)) {
-        const detail = err.response?.data?.detail;
-        setError(typeof detail === "string" ? detail : "Не удалось сбросить пароль");
-      } else {
-        setError("Ошибка соединения");
-      }
+      // /auth/reset-password only ever raises curated Russian messages
+      // (expired/used token, password policy) with 400/422 — safe to show.
+      setError(
+        getFriendlyErrorMessage(err, {
+          fallback: "Не удалось сбросить пароль",
+          allowedDetail: true,
+        })
+      );
     } finally {
       setLoading(false);
     }
