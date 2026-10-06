@@ -60,10 +60,11 @@ export function ForgotPasswordPage() {
         ) : (
           <form onSubmit={handleSubmit} className="w-full flex flex-col gap-5 mt-4">
             <div className="flex flex-col gap-[5px]">
-              <label className="text-[22px] font-medium text-primary leading-[150%]">
+              <label htmlFor="forgot-password-email" className="text-[22px] font-medium text-primary leading-[150%]">
                 Почта
               </label>
               <input
+                id="forgot-password-email"
                 type="email"
                 required
                 autoComplete="email"

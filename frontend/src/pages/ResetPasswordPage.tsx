@@ -80,10 +80,11 @@ export function ResetPasswordPage() {
         ) : (
           <form onSubmit={handleSubmit} className="w-full flex flex-col gap-5 mt-2">
             <div className="flex flex-col gap-[5px]">
-              <label className="text-[22px] font-medium text-primary leading-[150%]">
+              <label htmlFor="reset-password-new" className="text-[22px] font-medium text-primary leading-[150%]">
                 Новый пароль
               </label>
               <PasswordInput
+                id="reset-password-new"
                 required
                 autoComplete="new-password"
                 value={password}
@@ -94,10 +95,11 @@ export function ResetPasswordPage() {
             </div>
 
             <div className="flex flex-col gap-[5px]">
-              <label className="text-[22px] font-medium text-primary leading-[150%]">
+              <label htmlFor="reset-password-confirm" className="text-[22px] font-medium text-primary leading-[150%]">
                 Повторите пароль
               </label>
               <PasswordInput
+                id="reset-password-confirm"
                 required
                 autoComplete="new-password"
                 value={confirm}
