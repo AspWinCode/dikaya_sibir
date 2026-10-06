@@ -5,6 +5,7 @@ export interface ArticleListItem {
   slug: string;
   title: string;
   category: string | null;
+  display_order: number;
   excerpt: string;
   is_published: boolean;
   updated_at: string;
@@ -15,6 +16,7 @@ export interface ArticleRead {
   slug: string;
   title: string;
   category: string | null;
+  display_order: number;
   content: string;
   is_published: boolean;
   created_by: string | null;
@@ -26,6 +28,7 @@ export interface ArticleCreate {
   title: string;
   slug?: string;
   category?: string | null;
+  display_order?: number;
   content?: string;
   is_published?: boolean;
 }
@@ -33,6 +36,7 @@ export interface ArticleCreate {
 export interface ArticleUpdate {
   title?: string;
   category?: string | null;
+  display_order?: number;
   content?: string;
   is_published?: boolean;
 }

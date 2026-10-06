@@ -284,6 +284,46 @@ async def test_filter_by_category(client: AsyncClient, admin: User) -> None:
 
 
 @pytest.mark.asyncio
+async def test_articles_are_ordered_by_display_order(client: AsyncClient, admin: User) -> None:
+    """Admin-controlled ordering (used by the Learning page's steps/materials
+    sections) — created out of order, must come back sorted by display_order."""
+    token = await _login(client, admin.email, "Admin1234!")
+    for title, slug, order in [("Third", "step-third", 2), ("First", "step-first", 0), ("Second", "step-second", 1)]:
+        await client.post(
+            "/api/v1/kb/articles",
+            json={"title": title, "slug": slug, "category": "Следующие шаги", "display_order": order, "content": ""},
+            headers=_headers(token),
+        )
+
+    resp = await client.get("/api/v1/kb/articles?category=Следующие шаги", headers=_headers(token))
+    assert resp.status_code == 200
+    assert [a["slug"] for a in resp.json()] == ["step-first", "step-second", "step-third"]
+
+
+@pytest.mark.asyncio
+async def test_admin_can_reorder_article(client: AsyncClient, admin: User) -> None:
+    token = await _login(client, admin.email, "Admin1234!")
+    created = await client.post(
+        "/api/v1/kb/articles",
+        json={"title": "Step", "slug": "reorder-me", "category": "Следующие шаги", "content": ""},
+        headers=_headers(token),
+    )
+    assert created.json()["display_order"] == 0
+
+    updated = await client.patch(
+        "/api/v1/kb/articles/reorder-me",
+        json={"display_order": 5},
+        headers=_headers(token),
+    )
+    assert updated.status_code == 200
+    assert updated.json()["display_order"] == 5
+
+    # Survives a fresh read, not just the mutation response.
+    fetched = await client.get("/api/v1/kb/articles/reorder-me", headers=_headers(token))
+    assert fetched.json()["display_order"] == 5
+
+
+@pytest.mark.asyncio
 async def test_list_categories_returns_distinct_published_categories(client: AsyncClient, admin: User) -> None:
     token = await _login(client, admin.email, "Admin1234!")
     for slug, category, published in [

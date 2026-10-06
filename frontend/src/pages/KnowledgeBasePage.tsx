@@ -130,6 +130,9 @@ export function KnowledgeBasePage() {
                     {!item.is_published && (
                       <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-mainbg text-primary/50">Черновик</span>
                     )}
+                    {isAdmin && (
+                      <span className="text-[11px] text-primary/35 ml-auto">#{item.display_order}</span>
+                    )}
                   </div>
                   <p className="text-[15px] font-semibold text-primary mb-1.5">{item.title}</p>
                   <p className="text-[13px] text-primary/60 line-clamp-3">{item.excerpt}</p>
@@ -247,6 +250,7 @@ function ArticleEditor({
 
   const [title, setTitle] = useState(existingQ.data?.title ?? "");
   const [category, setCategoryField] = useState(existingQ.data?.category ?? "");
+  const [displayOrder, setDisplayOrder] = useState(existingQ.data?.display_order ?? 0);
   const [content, setContent] = useState(existingQ.data?.content ?? "");
   const [isPublished, setIsPublished] = useState(existingQ.data?.is_published ?? true);
   const [initialized, setInitialized] = useState(false);
@@ -256,6 +260,7 @@ function ArticleEditor({
   if (existingSlug && existingQ.data && !initialized) {
     setTitle(existingQ.data.title);
     setCategoryField(existingQ.data.category ?? "");
+    setDisplayOrder(existingQ.data.display_order);
     setContent(existingQ.data.content);
     setIsPublished(existingQ.data.is_published);
     setInitialized(true);
@@ -288,12 +293,12 @@ function ArticleEditor({
     try {
       if (existingSlug) {
         const updated = await updateMut.mutateAsync({
-          title, category: category || null, content, is_published: isPublished,
+          title, category: category || null, display_order: displayOrder, content, is_published: isPublished,
         });
         onDone(updated.slug);
       } else {
         const created = await createMut.mutateAsync({
-          title, category: category || undefined, content, is_published: isPublished,
+          title, category: category || undefined, display_order: displayOrder, content, is_published: isPublished,
         });
         onDone(created.slug);
       }
@@ -318,14 +323,25 @@ function ArticleEditor({
           />
         </div>
 
-        <div>
-          <label className="text-[13px] font-medium text-primary block mb-1.5">Категория</label>
-          <input
-            value={category}
-            onChange={(e) => setCategoryField(e.target.value)}
-            placeholder="Например: Правила, Импорт, Безопасность"
-            className="w-full h-[38px] px-3 rounded-[8px] border border-cardbg text-[14px] outline-none focus:border-cta"
-          />
+        <div className="flex gap-4">
+          <div className="flex-1">
+            <label className="text-[13px] font-medium text-primary block mb-1.5">Категория</label>
+            <input
+              value={category}
+              onChange={(e) => setCategoryField(e.target.value)}
+              placeholder="Например: Правила, Импорт, Безопасность"
+              className="w-full h-[38px] px-3 rounded-[8px] border border-cardbg text-[14px] outline-none focus:border-cta"
+            />
+          </div>
+          <div className="w-[140px]">
+            <label className="text-[13px] font-medium text-primary block mb-1.5">Порядок</label>
+            <input
+              type="number"
+              value={displayOrder}
+              onChange={(e) => setDisplayOrder(Number(e.target.value) || 0)}
+              className="w-full h-[38px] px-3 rounded-[8px] border border-cardbg text-[14px] outline-none focus:border-cta"
+            />
+          </div>
         </div>
 
         <div>

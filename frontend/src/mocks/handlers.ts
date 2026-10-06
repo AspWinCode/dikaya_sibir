@@ -1602,29 +1602,50 @@ export const handlers = [
   // ---- Knowledge base (ТЗ 3.12) ----
   ...(() => {
     interface MockArticle {
-      id: string; slug: string; title: string; category: string | null;
+      id: string; slug: string; title: string; category: string | null; display_order: number;
       content: string; is_published: boolean; created_by: string | null;
       created_at: string; updated_at: string;
     }
     const articles: MockArticle[] = [
       {
         id: "kb-1", slug: "kak-sozdat-pravilo", title: "Как создать правило",
-        category: "Правила",
+        category: "Правила", display_order: 0,
         content: "<p>Откройте раздел <b>Автоматизация</b> и нажмите «Добавить правило».</p>",
         is_published: true, created_by: MOCK_USER.id,
         created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
       },
       {
         id: "kb-2", slug: "import-dannyh", title: "Импорт данных из Excel",
-        category: "Импорт",
+        category: "Импорт", display_order: 0,
         content: "<p>Загрузите файл CSV или XLSX и сопоставьте колонки с полями таблицы.</p>",
         is_published: true, created_by: MOCK_USER.id,
         created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
       },
       {
         id: "kb-3", slug: "s-chego-nachat", title: "С чего начать работу с приложением",
-        category: "Обучение",
+        category: "Обучение", display_order: 0,
         content: "<p>Создайте таблицы в разделе <b>Данные</b>, соберите страницы в <b>Конструкторе</b> и опубликуйте приложение.</p>",
+        is_published: true, created_by: MOCK_USER.id,
+        created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: "kb-4", slug: "izuchite-prilozhenie", title: "Изучите приложение",
+        category: "Следующие шаги", display_order: 0,
+        content: "<p>Посмотрите, из каких таблиц и страниц состоит ваше приложение.</p>",
+        is_published: true, created_by: MOCK_USER.id,
+        created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: "kb-5", slug: "vyberite-temu", title: "Выберите тему",
+        category: "Следующие шаги", display_order: 1,
+        content: "<p>Настройте фирменные цвета и логотипы.</p>",
+        is_published: true, created_by: MOCK_USER.id,
+        created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: "kb-6", slug: "priglasite-polzovateley", title: "Пригласите пользователей",
+        category: "Следующие шаги", display_order: 2,
+        content: "<p>Поделитесь своим приложением с другими.</p>",
         is_published: true, created_by: MOCK_USER.id,
         created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
       },
@@ -1639,8 +1660,9 @@ export const handlers = [
         let items = articles.filter((a) => a.is_published);
         if (category) items = items.filter((a) => a.category === category);
         if (q) items = items.filter((a) => a.title.toLowerCase().includes(q) || a.content.toLowerCase().includes(q));
+        items = items.slice().sort((a, b) => a.display_order - b.display_order);
         return HttpResponse.json(items.map((a) => ({
-          id: a.id, slug: a.slug, title: a.title, category: a.category,
+          id: a.id, slug: a.slug, title: a.title, category: a.category, display_order: a.display_order,
           excerpt: excerpt(a.content), is_published: a.is_published, updated_at: a.updated_at,
         })));
       }),
@@ -1665,6 +1687,7 @@ export const handlers = [
           slug: body.slug || `article-${Math.random().toString(36).slice(2, 8)}`,
           title: body.title ?? "",
           category: body.category ?? null,
+          display_order: body.display_order ?? 0,
           content: body.content ?? "",
           is_published: body.is_published ?? true,
           created_by: MOCK_USER.id,

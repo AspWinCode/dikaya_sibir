@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,6 +19,9 @@ class Article(Base):
     slug: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     category: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    # Manual display order within a category (ascending). Admin-controlled —
+    # see KnowledgeService.list_articles / the Learning page's materials+steps.
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     # HTML — a rich-text/video-embed body (ТЗ 3.12: "текст, изображения, видео").
     # Images are embedded via <img src="/api/v1/kb/images/{id}/file">, which
     # always resolves to a fresh presigned S3 URL (see ArticleImage below).

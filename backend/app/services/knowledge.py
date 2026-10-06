@@ -66,7 +66,9 @@ class KnowledgeService:
         include_unpublished: bool = False,
         limit: int = 50,
     ) -> list[ArticleListItem]:
-        stmt = select(Article).order_by(Article.updated_at.desc()).limit(limit)
+        stmt = select(Article).order_by(
+            Article.display_order.asc(), Article.updated_at.desc()
+        ).limit(limit)
         if not include_unpublished:
             stmt = stmt.where(Article.is_published.is_(True))
         if category:
@@ -79,6 +81,7 @@ class KnowledgeService:
         return [
             ArticleListItem(
                 id=a.id, slug=a.slug, title=a.title, category=a.category,
+                display_order=a.display_order,
                 excerpt=_excerpt(a.content), is_published=a.is_published, updated_at=a.updated_at,
             )
             for a in rows
@@ -102,6 +105,7 @@ class KnowledgeService:
         slug = data.slug or slugify(data.title)
         article = Article(
             slug=slug, title=data.title, category=data.category,
+            display_order=data.display_order,
             content=data.content, is_published=data.is_published, created_by=actor_id,
         )
         self._db.add(article)
@@ -117,6 +121,8 @@ class KnowledgeService:
             article.title = data.title
         if data.category is not None:
             article.category = data.category
+        if data.display_order is not None:
+            article.display_order = data.display_order
         if data.content is not None:
             article.content = data.content
         if data.is_published is not None:

@@ -18,6 +18,7 @@ class ArticleRead(BaseModel):
     slug: str
     title: str
     category: str | None
+    display_order: int
     content: str
     is_published: bool
     created_by: uuid.UUID | None
@@ -32,6 +33,7 @@ class ArticleListItem(BaseModel):
     slug: str
     title: str
     category: str | None
+    display_order: int
     excerpt: str
     is_published: bool
     updated_at: datetime
@@ -42,6 +44,7 @@ class ArticleCreate(BaseModel):
     title: str = Field(min_length=1, max_length=256)
     slug: str | None = Field(default=None, min_length=1, max_length=200, pattern=r"^[a-z0-9][a-z0-9-]*$")
     category: str | None = Field(default=None, max_length=128)
+    display_order: int = 0
     content: str = Field(default="", max_length=200_000)
     is_published: bool = True
 
@@ -49,6 +52,7 @@ class ArticleCreate(BaseModel):
 class ArticleUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=256)
     category: str | None = Field(default=None, max_length=128)
+    display_order: int | None = None
     content: str | None = Field(default=None, max_length=200_000)
     is_published: bool | None = None
 
