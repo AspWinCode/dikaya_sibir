@@ -31,7 +31,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[lint]"
       - run: ruff check app tests
       - run: ruff format --check app tests
       - run: mypy app
@@ -64,7 +64,7 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://app_user:app_pass@localhost:5432/nocode_test
+      DATABASE_URL: postgresql://app_user:app_pass@localhost:5433/nocode_test
       TEST_DATABASE_URL: postgresql+asyncpg://app_user:app_pass@localhost:5433/nocode_test
       REDIS_URL: redis://localhost:6379/0
       JWT_PRIVATE_KEY: ${{ secrets.JWT_PRIVATE_KEY_TEST }}
@@ -76,10 +76,8 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[test]"
       - run: alembic upgrade head
-        env:
-          DATABASE_URL: postgresql://app_user:app_pass@localhost:5433/nocode_test
       - run: pytest -v --cov=app --cov-report=xml
       - uses: codecov/codecov-action@v4
         with:
@@ -97,17 +95,14 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
 
   frontend-test:
     name: Frontend — Tests
@@ -117,16 +112,13 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test:coverage
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run test:coverage
       - uses: codecov/codecov-action@v4
         with:
           flags: frontend

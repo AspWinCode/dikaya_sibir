@@ -88,6 +88,16 @@ test = [
 load = [
     "locust==2.32.4",
 ]
+# Lint/type-check only — kept separate from `test` and `dev` because `dev`
+# pulls in semgrep, which pins opentelemetry-api~=1.25 and conflicts with the
+# app's pinned 1.29 (see the note on `test` above). CI's lint job uses this.
+lint = [
+    "ruff==0.8.4",
+    "mypy==1.13.0",
+    "types-redis==4.6.0.20241004",
+    "types-passlib==1.7.7.20240819",
+    "types-python-jose==3.3.4.20240106",
+]
 dev = [
     # Testing
     "pytest==8.3.4",

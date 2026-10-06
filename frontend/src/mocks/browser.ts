@@ -15,6 +15,5 @@ export async function startMocks(): Promise<void> {
   await worker.start({
     onUnhandledRequest: "bypass", // let real assets / unmocked calls through
   });
-  // eslint-disable-next-line no-console
   console.info("[mocks] MSW enabled — using in-memory mock backend");
 }

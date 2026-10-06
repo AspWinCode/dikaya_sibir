@@ -1672,7 +1672,7 @@ function FormulaEditorModal({
             <div className="text-[12px] text-primary/40 space-y-1 border-t border-cardbg pt-3">
               <p><span className="font-mono text-blue-600">{"{field}"}</span> — ссылка на поле текущей сущности</p>
               <p><span className="font-mono text-blue-600">{"{entity.field}"}</span> — ссылка на поле связанной сущности</p>
-              <p>Строки: <span className="font-mono text-green-700">'значение'</span> · Числа: <span className="font-mono text-green-700">42</span> · Булево: <span className="font-mono text-green-700">true / false</span></p>
+              <p>Строки: <span className="font-mono text-green-700">&apos;значение&apos;</span> · Числа: <span className="font-mono text-green-700">42</span> · Булево: <span className="font-mono text-green-700">true / false</span></p>
             </div>
           </div>
 
