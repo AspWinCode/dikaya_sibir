@@ -9,7 +9,16 @@ interface PreviewPanelProps {
 }
 
 export function PreviewPanel({ projectName = "Fitness App", appId, onOpen }: PreviewPanelProps) {
-  const [device, setDevice] = useState<"mobile" | "tablet" | "desktop">("mobile");
+  const [device, setDevice] = useState<"mobile" | "tablet">("mobile");
+  const runtimeUrl = appId ? buildRuntimeUrl(appId, window.location.origin) : null;
+
+  function handleDeviceChange(id: string) {
+    if (id === "desktop") {
+      if (runtimeUrl) window.open(runtimeUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setDevice(id as "mobile" | "tablet");
+  }
 
   const tabs = [
     {
@@ -34,7 +43,9 @@ export function PreviewPanel({ projectName = "Fitness App", appId, onOpen }: Pre
     },
     {
       id: "desktop",
-      label: "Десктоп",
+      label: "Десктоп ↗",
+      disabled: !runtimeUrl,
+      title: runtimeUrl ? "Открыть в новой вкладке" : "Выберите приложение",
       icon: (
         <svg viewBox="0 0 23 23" fill="none" className="w-full h-full">
           <rect x="1" y="2" width="21" height="14" rx="2" stroke="#00205F" strokeWidth="2"/>
@@ -45,12 +56,10 @@ export function PreviewPanel({ projectName = "Fitness App", appId, onOpen }: Pre
     },
   ];
 
-  const FRAME_W: Record<typeof device, number> = { mobile: 380, tablet: 480, desktop: 560 };
-  const OUTER_R: Record<typeof device, number> = { mobile: 60, tablet: 32, desktop: 20 };
+  const FRAME_W: Record<typeof device, number> = { mobile: 380, tablet: 480 };
+  const OUTER_R: Record<typeof device, number> = { mobile: 60, tablet: 32 };
   const frameW = FRAME_W[device];
   const outerR = OUTER_R[device];
-
-  const runtimeUrl = appId ? buildRuntimeUrl(appId, window.location.origin) : null;
 
   return (
     <div
@@ -65,7 +74,7 @@ export function PreviewPanel({ projectName = "Fitness App", appId, onOpen }: Pre
       <TabSwitcher
         tabs={tabs}
         activeId={device}
-        onChange={(id) => setDevice(id as "mobile" | "tablet" | "desktop")}
+        onChange={handleDeviceChange}
         className="shrink-0"
       />
 

@@ -2423,7 +2423,7 @@ function DesignTab({
 }
 
 /* ── Iframe preview panel (right side, mirrors RuntimeApp at real scale) ── */
-function IframePreview({
+export function IframePreview({
   appId,
   appName,
   activePageId,
@@ -2436,7 +2436,19 @@ function IframePreview({
   iframeRef: React.RefObject<HTMLIFrameElement>;
   accent: string;
 }) {
-  const [device, setDevice] = useState<"mobile" | "tablet" | "desktop">("mobile");
+  const [device, setDevice] = useState<"mobile" | "tablet">("mobile");
+
+  const src = appId
+    ? `/app/?app=${appId}&preview=true&page=${activePageId}`
+    : "";
+
+  function handleDeviceChange(id: string) {
+    if (id === "desktop") {
+      if (src) window.open(src, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setDevice(id as "mobile" | "tablet");
+  }
 
   const tabs = [
     { id: "mobile", label: "Смартфон", icon: (
@@ -2451,7 +2463,7 @@ function IframePreview({
         <circle cx="11.5" cy="18" r="0.8" fill="#00205F"/>
       </svg>
     )},
-    { id: "desktop", label: "Десктоп", icon: (
+    { id: "desktop", label: "Десктоп ↗", disabled: !src, title: src ? "Открыть в новой вкладке" : "Выберите приложение", icon: (
       <svg viewBox="0 0 23 23" fill="none" className="w-full h-full">
         <rect x="1" y="2" width="21" height="14" rx="2" stroke="#00205F" strokeWidth="2"/>
         <path d="M7 20 L16 20" stroke="#00205F" strokeWidth="2" strokeLinecap="round"/>
@@ -2461,19 +2473,13 @@ function IframePreview({
   ];
 
   // Mobile: 380×800 phone frame. Tablet: 460×620, 768px content scaled down.
-  // Desktop: 540×500 widescreen frame, 1280px content scaled down.
   const DEVICE_CFG = {
     mobile:  { frameW: 380, frameH: 800, iframeW: 390,  borderR: 40 },
     tablet:  { frameW: 460, frameH: 620, iframeW: 768,  borderR: 24 },
-    desktop: { frameW: 540, frameH: 500, iframeW: 1280, borderR: 14 },
   } as const;
   const cfg = DEVICE_CFG[device];
   const scale = cfg.frameW / cfg.iframeW;
   const iframeH = Math.ceil(cfg.frameH / scale);
-
-  const src = appId
-    ? `/app/?app=${appId}&preview=true&page=${activePageId}`
-    : "";
 
   return (
     <div
@@ -2483,7 +2489,7 @@ function IframePreview({
       <TabSwitcher
         tabs={tabs}
         activeId={device}
-        onChange={(id) => setDevice(id as "mobile" | "tablet" | "desktop")}
+        onChange={handleDeviceChange}
       />
 
       {/* Device frame */}
