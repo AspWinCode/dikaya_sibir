@@ -1,5 +1,36 @@
 /** Pure, unit-testable helpers extracted from RuntimeApp block rendering. */
 
+export type RangeStatus = "ok" | "below" | "above" | "unknown";
+
+/**
+ * Compares a measured value against an optional [min, max] range — e.g. a
+ * "Температурный контроль" reading against its Помещение's configured
+ * min/max temperature. Generic: works for any numeric field checked
+ * against any two optional bounds, not specific to temperature.
+ *
+ * Both bounds are optional independently (a room might only have a max,
+ * or neither, in which case the status is "unknown" rather than a
+ * confident but meaningless "ok" — don't claim a reading is fine when
+ * there was nothing to check it against).
+ */
+export function computeRangeStatus(
+  value: number | null | undefined,
+  min: number | null | undefined,
+  max: number | null | undefined,
+): RangeStatus {
+  if (value === null || value === undefined || isNaN(value)) return "unknown";
+  if (min === null || min === undefined) {
+    if (max === null || max === undefined) return "unknown";
+    return value > max ? "above" : "ok";
+  }
+  if (max === null || max === undefined) {
+    return value < min ? "below" : "ok";
+  }
+  if (value < min) return "below";
+  if (value > max) return "above";
+  return "ok";
+}
+
 /** Parses a newline-separated static option list into trimmed, non-empty option strings. */
 export function parseStaticOptions(raw: string | undefined | null): string[] {
   if (!raw) return [];

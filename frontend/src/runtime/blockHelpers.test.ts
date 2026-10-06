@@ -1,5 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { parseStaticOptions, groupRecordsByField, buildRecordTree } from "./blockHelpers";
+import { parseStaticOptions, groupRecordsByField, buildRecordTree, computeRangeStatus } from "./blockHelpers";
+
+describe("computeRangeStatus (e.g. температура помещения vs его min/max)", () => {
+  it("is 'ok' within [min, max] inclusive, 'below'/'above' outside it", () => {
+    expect(computeRangeStatus(5, 2, 8)).toBe("ok");
+    expect(computeRangeStatus(2, 2, 8)).toBe("ok");
+    expect(computeRangeStatus(8, 2, 8)).toBe("ok");
+    expect(computeRangeStatus(1, 2, 8)).toBe("below");
+    expect(computeRangeStatus(9, 2, 8)).toBe("above");
+  });
+
+  it("is 'unknown' when the value is missing — never a false 'ok'", () => {
+    expect(computeRangeStatus(null, 2, 8)).toBe("unknown");
+    expect(computeRangeStatus(undefined, 2, 8)).toBe("unknown");
+    expect(computeRangeStatus(NaN, 2, 8)).toBe("unknown");
+  });
+
+  it("is 'unknown' when neither bound is configured on the room — nothing to check against", () => {
+    expect(computeRangeStatus(5, null, null)).toBe("unknown");
+  });
+
+  it("checks against a single bound when only one side is configured", () => {
+    expect(computeRangeStatus(10, 2, null)).toBe("ok");
+    expect(computeRangeStatus(1, 2, null)).toBe("below");
+    expect(computeRangeStatus(5, null, 8)).toBe("ok");
+    expect(computeRangeStatus(9, null, 8)).toBe("above");
+  });
+});
 
 describe("parseStaticOptions", () => {
   it("splits on newlines and trims", () => {

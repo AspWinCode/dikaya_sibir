@@ -8,7 +8,7 @@ import { listEntities, listRelations, type EntityRead, type FieldRead, type Rela
 import { listRecords, getRecord, createRecord, updateRecord, deleteRecord, type RecordRead } from "@/shared/api/records";
 import { apiClient } from "@/shared/api/client";
 import { fetchMe } from "@/shared/api/auth";
-import { parseStaticOptions, groupRecordsByField, buildRecordTree } from "./blockHelpers";
+import { parseStaticOptions, groupRecordsByField, buildRecordTree, computeRangeStatus } from "./blockHelpers";
 
 /** Aggregation/visualization blocks (pivot, chart, kanban, tree, gantt...) need
  * the whole table to compute correct totals/groupings/labels - unlike a browsable
@@ -1491,9 +1491,20 @@ function TableBlock({ appId, entities, relations, title, entityId, visibleSystem
                         </td>
                       );
                     }
+                    const rangeInfo = rangeCheckInfo(f, rec, tableEntity.id, cols, relations ?? []);
                     return (
                       <td key={f.id} style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
                         {f.is_system && f.name === "author_id" ? <AuthorCell userId={String(fieldValue(rec, f) ?? "")} /> : formatCell(fieldValue(rec, f), f)}
+                        {rangeInfo && (
+                          <RangeStatusCell
+                            appId={appId}
+                            relatedEntityId={rangeInfo.relatedEntityId}
+                            relatedRecordId={rangeInfo.relatedRecordId}
+                            value={Number(fieldValue(rec, f))}
+                            minField={rangeInfo.minField}
+                            maxField={rangeInfo.maxField}
+                          />
+                        )}
                       </td>
                     );
                   })}
@@ -3203,6 +3214,47 @@ function RelationCell({ appId, relatedEntityId, recordId, entities }: {
   return <>{String(rec.payload[displayField] ?? "—")}</>;
 }
 
+/** Generic "is this value within range?" badge for a field whose
+ * `field_options.range_check = {relation_field, min_field, max_field}`
+ * names a relation on the same record and the min/max fields to read off
+ * the related record — e.g. a temperature reading vs. its Помещение's
+ * configured min/max. Not specific to temperature: any numeric field
+ * checked against any related record's two bound fields can use this. */
+function RangeStatusCell({ appId, relatedEntityId, relatedRecordId, value, minField, maxField }: {
+  appId: string; relatedEntityId: string | null; relatedRecordId: string;
+  value: number | null; minField: string; maxField: string;
+}) {
+  const listQ = useQuery({
+    queryKey: ["rt-records", appId, relatedEntityId],
+    queryFn: () => listRecords(appId, relatedEntityId!, { limit: 200 }),
+    enabled: !!relatedEntityId && !!relatedRecordId,
+  });
+  const rec = listQ.data?.items.find((r) => r.id === relatedRecordId);
+  if (!relatedRecordId) return null;
+  if (listQ.isLoading) return <span style={{ fontSize: 11 }}>…</span>;
+  if (!rec) return null;
+
+  const toNum = (raw: unknown): number | null => {
+    if (raw === null || raw === undefined || raw === "") return null;
+    const n = Number(raw);
+    return isNaN(n) ? null : n;
+  };
+  const status = computeRangeStatus(value, toNum(rec.payload[minField]), toNum(rec.payload[maxField]));
+  if (status === "unknown") return null;
+
+  const STYLE: Record<string, { bg: string; fg: string; label: string }> = {
+    ok:    { bg: "#E8F5E9", fg: "#2E7D32", label: "Норма" },
+    below: { bg: "#FFEBEE", fg: "#D32F2F", label: "Ниже нормы" },
+    above: { bg: "#FFEBEE", fg: "#D32F2F", label: "Выше нормы" },
+  };
+  const s = STYLE[status];
+  return (
+    <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, padding: "2px 7px", borderRadius: 10, background: s.bg, color: s.fg }}>
+      {s.label}
+    </span>
+  );
+}
+
 /** Resolves the "Автор" system field (a platform account id) to that
  * account's display name. GET /users/{id} 404s for accounts other than the
  * viewer unless the viewer has an elevated role - falls back to a shortened
@@ -4145,6 +4197,30 @@ function resolveRelationTargetEntityId(
   );
   if (!rel) return null;
   return rel.from_entity_id === entityId ? rel.to_entity_id : rel.from_entity_id;
+}
+
+/** Resolves a `range_check` field_options config (see RangeStatusCell) for
+ * one field/record into the props that component needs, or null if the
+ * field has no such config or the named relation field can't be resolved. */
+function rangeCheckInfo(
+  field: FieldRead,
+  rec: RecordRead,
+  entityId: string | null | undefined,
+  entityFields: FieldRead[],
+  relations: RelationRead[],
+): { relatedEntityId: string | null; relatedRecordId: string; minField: string; maxField: string } | null {
+  const rc = field.field_options?.range_check as
+    | { relation_field: string; min_field: string; max_field: string }
+    | undefined;
+  if (!rc) return null;
+  const relField = entityFields.find((f) => f.name === rc.relation_field);
+  if (!relField) return null;
+  return {
+    relatedEntityId: resolveRelationTargetEntityId(relField, entityId, relations),
+    relatedRecordId: String(rec.payload[rc.relation_field] ?? ""),
+    minField: rc.min_field,
+    maxField: rc.max_field,
+  };
 }
 
 function formatCell(value: unknown, field: FieldRead): string {
