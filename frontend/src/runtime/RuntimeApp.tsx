@@ -1056,9 +1056,34 @@ function fieldLabel(f: FieldRead | undefined, raw: unknown): string {
   return String(raw);
 }
 
-function PivotBlock({ appId, entities, title, entityId, rowField, colField, valueField, agg, colors }: {
+/** Applies the pivot block's single filter condition (field/op/value) to a
+ * record set, client-side — the pivot already pulls the full record set for
+ * in-memory bucketing, so this stays consistent with that, no API change. */
+export function applyPivotFilter(records: RecordRead[], field: string, op: string, value: string): RecordRead[] {
+  if (!field || value === "") return records;
+  return records.filter((r) => {
+    const raw = r.payload[field];
+    if (raw === null || raw === undefined) return op === "ne";
+    const rawStr = String(raw);
+    const rawNum = Number(raw);
+    const valNum = Number(value);
+    switch (op) {
+      case "eq": return rawStr === value;
+      case "ne": return rawStr !== value;
+      case "gt": return !isNaN(rawNum) && !isNaN(valNum) && rawNum > valNum;
+      case "gte": return !isNaN(rawNum) && !isNaN(valNum) && rawNum >= valNum;
+      case "lt": return !isNaN(rawNum) && !isNaN(valNum) && rawNum < valNum;
+      case "lte": return !isNaN(rawNum) && !isNaN(valNum) && rawNum <= valNum;
+      case "icontains": return rawStr.toLowerCase().includes(value.toLowerCase());
+      default: return true;
+    }
+  });
+}
+
+function PivotBlock({ appId, entities, title, entityId, rowField, colField, valueField, agg, filterField, filterOp, filterValue, colors }: {
   appId: string; entities: EntityRead[]; title?: string | null; entityId: string;
-  rowField: string; colField: string; valueField: string; agg: string; colors: AppColors;
+  rowField: string; colField: string; valueField: string; agg: string;
+  filterField?: string; filterOp?: string; filterValue?: string; colors: AppColors;
 }) {
   const recordsQuery = useQuery({
     queryKey: ["rt-records-all", appId, entityId, "pivot"],
@@ -1068,7 +1093,7 @@ function PivotBlock({ appId, entities, title, entityId, rowField, colField, valu
   const pivotEntity = entities.find((e) => e.id === entityId);
   const rowFieldDef = pivotEntity?.fields.find((f) => f.name === rowField);
   const colFieldDef = pivotEntity?.fields.find((f) => f.name === colField);
-  const records = recordsQuery.data ?? [];
+  const records = applyPivotFilter(recordsQuery.data ?? [], filterField ?? "", filterOp ?? "eq", filterValue ?? "");
 
   const rowTargetEntityId = rowFieldDef?.field_type === "relation" ? (rowFieldDef.field_options?.target_entity_id as string | undefined) : undefined;
   const rowRelQuery = useQuery({
@@ -1130,10 +1155,13 @@ function PivotBlock({ appId, entities, title, entityId, rowField, colField, valu
     <section style={{ border: `1px solid ${colors.border}`, borderRadius: 10, overflow: "hidden", background: colors.surface }}>
       <div style={{ padding: "10px 14px", background: colors.bg, fontWeight: 600, fontSize: 15, display: "flex", justifyContent: "space-between", color: colors.text }}>
         <span>{title ?? "Сводная таблица"}</span>
-        <span style={{ color: colors.textMuted, fontWeight: 400, fontSize: 13 }}>{aggLabel[agg] ?? agg}{valueField ? ` · ${pivotEntity?.fields.find((f) => f.name === valueField)?.display_name ?? valueField}` : ""}</span>
+        <span style={{ color: colors.textMuted, fontWeight: 400, fontSize: 13 }}>
+          {aggLabel[agg] ?? agg}{valueField ? ` · ${pivotEntity?.fields.find((f) => f.name === valueField)?.display_name ?? valueField}` : ""}
+          {filterField ? ` · фильтр: ${pivotEntity?.fields.find((f) => f.name === filterField)?.display_name ?? filterField}` : ""}
+        </span>
       </div>
       {rowKeys.length === 0 ? (
-        <p style={{ padding: 14, color: colors.textMuted, fontSize: 14 }}>Нет данных.</p>
+        <p style={{ padding: 14, color: colors.textMuted, fontSize: 14 }}>Нет данных{filterField ? " по заданному фильтру" : ""}.</p>
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, color: colors.text }}>
@@ -2163,6 +2191,9 @@ function Block({ block, entity, cols, records, accent, colors, inputStyle, label
         colField={(cfg.col_field as string) ?? ""}
         valueField={(cfg.value_field as string) ?? ""}
         agg={(cfg.agg as string) ?? "count"}
+        filterField={(cfg.filter_field as string) ?? ""}
+        filterOp={(cfg.filter_op as string) ?? "eq"}
+        filterValue={(cfg.filter_value as string) ?? ""}
         colors={colors}
       />
     );

@@ -3077,27 +3077,119 @@ function BlockInlineSettings({
         <ConfigSelect label="Сущность" value={(block.config.entity_id as string) ?? ""} options={entityOptions} onChange={(entity_id) => onConfigChange({ entity_id })} />
       )}
 
-      {/* ── Display: pivot ── */}
-      {block.type === "pivot" && (
-        <>
-          <ConfigSelect label="Сущность" value={(block.config.entity_id as string) ?? ""} options={entityOptions} onChange={(entity_id) => onConfigChange({ entity_id })} />
-          <ConfigSelect label="Строки" value={(block.config.row_field as string) ?? ""} options={fieldOptions(entityFields(block.config.entity_id as string), "— выберите —")} onChange={(row_field) => onConfigChange({ row_field })} />
-          <ConfigSelect label="Столбцы" value={(block.config.col_field as string) ?? ""} options={fieldOptions(entityFields(block.config.entity_id as string), "— выберите —")} onChange={(col_field) => onConfigChange({ col_field })} />
-          <ConfigSelect label="Значение" value={(block.config.value_field as string) ?? ""} options={fieldOptions(entityFields(block.config.entity_id as string), "— выберите —")} onChange={(value_field) => onConfigChange({ value_field })} />
-          <ConfigSelect
-            label="Агрегация"
-            value={(block.config.agg as string) ?? "count"}
-            options={[
-              { value: "count", label: "Кол-во" },
-              { value: "sum",   label: "Сумма" },
-              { value: "avg",   label: "Среднее" },
-              { value: "min",   label: "Минимум" },
-              { value: "max",   label: "Максимум" },
-            ]}
-            onChange={(agg) => onConfigChange({ agg })}
-          />
-        </>
-      )}
+      {/* ── Display: pivot (report builder) ──
+          Vocabulary matches the acceptance criteria literally: Источник
+          данных → Показатель → Способ расчёта → Группировка → Фильтр, each
+          with a one-line explanation, instead of an unexplained "Параметр". */}
+      {block.type === "pivot" && (() => {
+        const pivotEntityId = (block.config.entity_id as string) ?? "";
+        const allFields = entityFields(pivotEntityId);
+        const agg = (block.config.agg as string) ?? "count";
+        const aggNeedsNumber = agg !== "count";
+        const valueFieldOptions = [
+          { value: "", label: aggNeedsNumber ? "— выберите числовое поле —" : "— любое поле —" },
+          ...allFields.map((f) => ({
+            value: f.name,
+            label: f.display_name,
+            disabled: !isFieldCompatibleWithAgg(f.field_type, agg),
+          })),
+        ];
+        // If the current value_field became incompatible after switching
+        // aggregation (e.g. was a text field, agg changed to "Сумма"),
+        // clear it instead of silently computing SUM(text) — the UI must
+        // never let an invalid combination sit there unexplained.
+        const currentValueField = (block.config.value_field as string) ?? "";
+        const currentValueFieldDef = allFields.find((f) => f.name === currentValueField);
+        const valueFieldInvalid =
+          currentValueFieldDef != null && !isFieldCompatibleWithAgg(currentValueFieldDef.field_type, agg);
+
+        const filterField = (block.config.filter_field as string) ?? "";
+        const filterOp = (block.config.filter_op as string) ?? "eq";
+        const filterValue = (block.config.filter_value as string) ?? "";
+
+        return (
+          <>
+            <ConfigSelect
+              label="Источник данных"
+              value={pivotEntityId}
+              options={entityOptions}
+              onChange={(entity_id) => onConfigChange({ entity_id, value_field: "", filter_field: "" })}
+              help="По какой таблице строится отчёт."
+            />
+            <ConfigSelect
+              label="Показатель"
+              value={valueFieldInvalid ? "" : currentValueField}
+              options={valueFieldOptions}
+              onChange={(value_field) => onConfigChange({ value_field })}
+              help="Что считаем — поле, значения которого суммируются/усредняются/считаются."
+            />
+            <ConfigSelect
+              label="Способ расчёта"
+              value={agg}
+              options={[
+                { value: "count", label: "Количество" },
+                { value: "sum",   label: "Сумма" },
+                { value: "avg",   label: "Среднее" },
+                { value: "min",   label: "Минимум" },
+                { value: "max",   label: "Максимум" },
+              ]}
+              onChange={(newAgg) => onConfigChange({
+                agg: newAgg,
+                // Clear a now-incompatible Показатель rather than leave an
+                // invalid SUM(text)-style combination in the config.
+                value_field: currentValueFieldDef && !isFieldCompatibleWithAgg(currentValueFieldDef.field_type, newAgg)
+                  ? "" : currentValueField,
+              })}
+              help="Например: сумма, количество или среднее. Сумма/среднее/минимум/максимум доступны только для числовых показателей."
+            />
+            <ConfigSelect
+              label="Группировать по (строки)"
+              value={(block.config.row_field as string) ?? ""}
+              options={fieldOptions(allFields, "— выберите —")}
+              onChange={(row_field) => onConfigChange({ row_field })}
+              help="Результат будет разбит на отдельные строки по этому полю."
+            />
+            <ConfigSelect
+              label="Группировать по (столбцы, необязательно)"
+              value={(block.config.col_field as string) ?? ""}
+              options={fieldOptions(allFields, "— не группировать —")}
+              onChange={(col_field) => onConfigChange({ col_field })}
+              help="Дополнительно разбивает результат на столбцы по этому полю."
+            />
+            <ConfigSelect
+              label="Фильтр — поле"
+              value={filterField}
+              options={fieldOptions(allFields, "— без фильтра —")}
+              onChange={(f) => onConfigChange({ filter_field: f })}
+              help="Какие записи включить в отчёт. Оставьте пустым, чтобы использовать все записи."
+            />
+            {filterField && (
+              <>
+                <ConfigSelect
+                  label="Фильтр — условие"
+                  value={filterOp}
+                  options={[
+                    { value: "eq", label: "равно" },
+                    { value: "ne", label: "не равно" },
+                    { value: "gt", label: "больше" },
+                    { value: "gte", label: "больше или равно" },
+                    { value: "lt", label: "меньше" },
+                    { value: "lte", label: "меньше или равно" },
+                    { value: "icontains", label: "содержит" },
+                  ]}
+                  onChange={(filter_op) => onConfigChange({ filter_op })}
+                />
+                <ConfigInput
+                  label="Фильтр — значение"
+                  value={filterValue}
+                  onChange={(filter_value) => onConfigChange({ filter_value })}
+                  placeholder="значение для сравнения"
+                />
+              </>
+            )}
+          </>
+        );
+      })()}
 
       {/* ── Display: gantt ── */}
       {block.type === "gantt" && (
@@ -3748,6 +3840,17 @@ function FormBlockSettings({
   );
 }
 
+const NUMERIC_AGG_FIELD_TYPES = new Set(["number", "decimal", "currency", "formula"]);
+
+/** Whether a field can be the report's "Показатель" (value field) under the
+ * given "Способ расчёта" (aggregation) — "Количество" (count) works on any
+ * field (it just counts rows), everything else needs a numeric-ish field.
+ * Exported for the report-builder validation tests. */
+export function isFieldCompatibleWithAgg(fieldType: string, agg: string): boolean {
+  if (agg === "count") return true;
+  return NUMERIC_AGG_FIELD_TYPES.has(fieldType);
+}
+
 function fieldOptions(fields: FieldRead[], emptyLabel: string): { value: string; label: string }[] {
   return [
     { value: "", label: emptyLabel },
@@ -3786,11 +3889,13 @@ function ConfigSelect({
   value,
   options,
   onChange,
+  help,
 }: {
   label: string;
   value: string;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; disabled?: boolean }[];
   onChange: (value: string) => void;
+  help?: string;
 }) {
   return (
     <label className="flex flex-col gap-[5px]">
@@ -3803,13 +3908,14 @@ function ConfigSelect({
                      border border-transparent focus:border-cta/40 transition-colors cursor-pointer"
         >
           {options.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
+            <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>
           ))}
         </select>
         <svg viewBox="0 0 16 16" fill="none" className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-primary/40 pointer-events-none">
           <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </div>
+      {help && <span className="text-[11px] text-primary/40 leading-snug">{help}</span>}
     </label>
   );
 }
