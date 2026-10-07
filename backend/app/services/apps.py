@@ -106,6 +106,16 @@ class AppService:
             term = f"%{search}%"
             stmt = stmt.where(or_(App.name.ilike(term), App.slug.ilike(term)))
 
+        # Count against the same filters, before cursor/limit are applied —
+        # the admin dashboard's "Активно"/"В разработке"/"Всего" card needs
+        # the real filtered total here, not the schema's `None` default
+        # (which the frontend coerced to 0, producing a negative "В
+        # разработке" whenever the current page already had more published
+        # apps than that fallback).
+        total = (
+            await self._db.execute(select(func.count()).select_from(stmt.subquery()))
+        ).scalar_one()
+
         if cursor:
             cur_ts, cur_id = _decode_cursor(cursor)
             stmt = stmt.where(
@@ -127,6 +137,7 @@ class AppService:
             items=[AppRead.model_validate(a) for a in items],
             next_cursor=next_cursor,
             has_more=has_more,
+            total=total,
         )
 
     async def get_app(self, app_id: uuid.UUID, actor_id: uuid.UUID) -> AppRead:

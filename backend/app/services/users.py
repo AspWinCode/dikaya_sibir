@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import ClassVar
 
 import structlog
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -75,6 +75,17 @@ class UserService:
             term = f"%{params.search}%"
             stmt = stmt.where(or_(User.email.ilike(term), User.display_name.ilike(term)))
 
+        # Count against the same filters, before cursor/limit are applied —
+        # this is what the admin dashboard's "Активно"/"В разработке"/"Всего"
+        # card needs: it compares a count derived from the *current page's*
+        # items against `total`, so `total` must be the real filtered count,
+        # not left as the schema's `None` default (which the frontend was
+        # coercing to 0, producing a negative "В разработке" whenever the
+        # current page already had more active users than that fallback).
+        total = (
+            await self._db.execute(select(func.count()).select_from(stmt.subquery()))
+        ).scalar_one()
+
         if params.cursor:
             cur_ts, cur_id = _decode_cursor(params.cursor)
             stmt = stmt.where(
@@ -96,6 +107,7 @@ class UserService:
             items=[UserRead.model_validate(u) for u in items],
             next_cursor=next_cursor,
             has_more=has_more,
+            total=total,
         )
 
     async def get_by_id(self, user_id: uuid.UUID) -> UserRead:
