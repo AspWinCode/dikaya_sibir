@@ -153,6 +153,85 @@ async def test_evaluate_rules_context_includes_record_id(db_session: AsyncSessio
 
 
 @pytest.mark.asyncio
+async def test_validation_rules_are_never_dispatched_to_the_async_batch(db_session: AsyncSession) -> None:
+    """Validation rules run synchronously, in-process, before the write
+    commits (ValidationRuleService) — the only place that resolves their
+    `lookup` condition nodes and knows what `block_save` means. The pure
+    async interpreter this batch runs through has neither, so a validation
+    rule reaching it always errors (reproduced end to end against a real
+    worker while building ТЗ item 13's balance rule — this was previously
+    masked because create_rule never persisted the requested rule_type at
+    all, see test_rules.py::test_create_rule_persists_the_requested_rule_type,
+    so no validation rule had ever actually reached this code path with its
+    real rule_type intact until that was fixed). A mix of rule types on the
+    same entity+event must dispatch only the non-validation ones."""
+    from app.models.logic import Rule
+
+    app_id = uuid.uuid4()
+    entity_id = uuid.uuid4()
+    record_id = uuid.uuid4()
+
+    validation_rule = Rule(
+        app_id=app_id, entity_id=entity_id, name="Block if too big", rule_type="validation",
+        trigger={"event": "record.created", "watch_fields": []},
+        conditions={"type": "compare", "field": "amount", "op": "gt",
+                    "value": {"type": "lookup", "entity_id": str(uuid.uuid4()), "field": "x", "agg": "sum", "filter": {}}},
+        actions=[{"type": "block_save", "message": "too big"}],
+        priority=10, is_active=True,
+    )
+    automation_rule = Rule(
+        app_id=app_id, entity_id=entity_id, name="Flag it", rule_type="automation",
+        trigger={"event": "record.created", "watch_fields": []},
+        conditions={}, actions=[{"type": "set_field", "field": "flagged", "value": {"type": "literal", "value": True}}],
+        priority=50, is_active=True,
+    )
+    db_session.add(validation_rule)
+    db_session.add(automation_rule)
+    await db_session.flush()
+
+    mock_task = MagicMock()
+    mock_task.id = "mock-task-id"
+
+    with patch(
+        "app.worker.tasks.sandbox.execute_rules_batch.apply_async",
+        return_value=mock_task,
+    ) as mock_apply:
+        svc = RuleService(db_session)
+        task_id = await svc.evaluate_rules_for_event(
+            app_id, entity_id, record_id, {"amount": 1}, "record.created"
+        )
+        assert task_id == "mock-task-id"
+        dispatched_ids = {r["id"] for r in mock_apply.call_args.kwargs["kwargs"]["rules"]}
+        assert dispatched_ids == {str(automation_rule.id)}
+
+
+@pytest.mark.asyncio
+async def test_only_validation_rules_means_nothing_is_dispatched(db_session: AsyncSession) -> None:
+    from app.models.logic import Rule
+
+    app_id = uuid.uuid4()
+    entity_id = uuid.uuid4()
+    record_id = uuid.uuid4()
+
+    db_session.add(Rule(
+        app_id=app_id, entity_id=entity_id, name="Only validation", rule_type="validation",
+        trigger={"event": "record.created", "watch_fields": []},
+        conditions={}, actions=[{"type": "block_save"}], priority=10, is_active=True,
+    ))
+    await db_session.flush()
+
+    with patch(
+        "app.worker.tasks.sandbox.execute_rules_batch.apply_async",
+    ) as mock_apply:
+        svc = RuleService(db_session)
+        task_id = await svc.evaluate_rules_for_event(
+            app_id, entity_id, record_id, {}, "record.created"
+        )
+        assert task_id is None
+        mock_apply.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_evaluate_rules_sorts_by_priority(db_session: AsyncSession) -> None:
     """Multiple active rules are dispatched as ONE batch task, sorted ascending
     by priority — not as one task per rule (that couldn't guarantee order)."""

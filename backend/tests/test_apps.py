@@ -207,3 +207,48 @@ async def test_create_relation(client: AsyncClient, builder_user: User) -> None:
     )
     assert resp.status_code == 201
     assert resp.json()["relation_type"] == "one_to_many"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_two_relations_to_the_same_entity_pair_under_different_field_names(
+    client: AsyncClient, builder_user: User
+) -> None:
+    """A record legitimately needing two distinct relations to the same
+    target entity (e.g. a transfer's "откуда"/"куда", both one_to_many to
+    the same Помещение entity) must not be rejected as a duplicate just
+    because the entity pair + type matches — only re-creating the exact
+    same from_field_name should be."""
+    token = await _auth(client, builder_user.email, "Builder1234!")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    app = await client.post("/api/v1/apps", json={"slug": "transfer-app", "name": "Transfer App"}, headers=headers)
+    app_id = app.json()["id"]
+    transfer = await client.post(
+        f"/api/v1/apps/{app_id}/entities", json={"slug": "transfer", "display_name": "Transfer"}, headers=headers,
+    )
+    location = await client.post(
+        f"/api/v1/apps/{app_id}/entities", json={"slug": "location", "display_name": "Location"}, headers=headers,
+    )
+    body = {
+        "from_entity_id": transfer.json()["id"], "to_entity_id": location.json()["id"],
+        "relation_type": "one_to_many",
+    }
+
+    first = await client.post(f"/api/v1/apps/{app_id}/relations",
+                               json={**body, "from_field_name": "from_location"}, headers=headers)
+    assert first.status_code == 201
+
+    second = await client.post(f"/api/v1/apps/{app_id}/relations",
+                                json={**body, "from_field_name": "to_location"}, headers=headers)
+    assert second.status_code == 201
+
+    # Re-creating the exact same relation (same field name) is still rejected.
+    dup = await client.post(f"/api/v1/apps/{app_id}/relations",
+                             json={**body, "from_field_name": "from_location"}, headers=headers)
+    assert dup.status_code == 409
+
+    entity_resp = await client.get(f"/api/v1/apps/{app_id}/entities/{transfer.json()['id']}", headers=headers)
+    field_names = {f["name"] for f in entity_resp.json()["fields"]}
+    assert "from_location" in field_names
+    assert "to_location" in field_names

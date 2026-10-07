@@ -900,6 +900,54 @@ async def test_create_rule(client: AsyncClient, builder: User) -> None:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_create_rule_persists_the_requested_rule_type(client: AsyncClient, builder: User) -> None:
+    """create_rule used to build the ORM Rule without passing rule_type at
+    all, so every rule silently fell back to the column's "automation"
+    default regardless of what was requested — a validation rule's
+    block_save action and lookup conditions would then get dispatched to
+    the async automation interpreter (which understands neither) instead
+    of ValidationRuleService's synchronous pre-commit check, and an
+    autofill rule would run async instead of inline. Round-trip through
+    the real create + get endpoints, not just the Pydantic schema."""
+    token = await _login(client, builder.email, "Build1234!")
+    app_id, entity_id = await _setup_app(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    for rule_type in ("validation", "autofill", "automation"):
+        body = _rule_body(entity_id, name=f"Rule {rule_type}")
+        body["rule_type"] = rule_type
+        if rule_type == "validation":
+            body["actions"] = [{"type": "block_save", "message": "blocked"}]
+        create = await client.post(f"/api/v1/apps/{app_id}/rules", json=body, headers=headers)
+        assert create.status_code == 201, create.text
+        assert create.json()["rule_type"] == rule_type
+
+        fetched = await client.get(f"/api/v1/apps/{app_id}/rules/{create.json()['id']}", headers=headers)
+        assert fetched.json()["rule_type"] == rule_type
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_update_rule_can_change_rule_type(client: AsyncClient, builder: User) -> None:
+    token = await _login(client, builder.email, "Build1234!")
+    app_id, entity_id = await _setup_app(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    create = await client.post(f"/api/v1/apps/{app_id}/rules", json=_rule_body(entity_id), headers=headers)
+    rule_id = create.json()["id"]
+    assert create.json()["rule_type"] == "automation"
+
+    update = await client.patch(
+        f"/api/v1/apps/{app_id}/rules/{rule_id}",
+        json={"rule_type": "autofill"},
+        headers=headers,
+    )
+    assert update.status_code == 200, update.text
+    assert update.json()["rule_type"] == "autofill"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_get_rule(client: AsyncClient, builder: User) -> None:
     token = await _login(client, builder.email, "Build1234!")
     app_id, entity_id = await _setup_app(client, token)

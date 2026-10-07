@@ -1,5 +1,6 @@
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import worker_process_init
 from kombu import Exchange, Queue
 
 from app.core.config import settings
@@ -70,3 +71,29 @@ celery_app.conf.update(
         },
     },
 )
+
+
+@worker_process_init.connect
+def _dispose_inherited_db_pool(**kwargs) -> None:
+    """Celery's prefork pool forks worker child processes *after*
+    `app.core.database` has already been imported (via the `include=[...]`
+    task modules above) and its module-level async engine/connection pool
+    created in the parent process. fork() duplicates that pool object's
+    Python state into each child, but the underlying asyncpg sockets and
+    their internal protocol state are not forkable — every child starts
+    out sharing file descriptors with the parent and with every sibling
+    child, so two of them touching the "same" pooled connection collide
+    with asyncpg's "another operation is in progress" (an operation one
+    sibling issued races one issued by another on what is, at the OS
+    level, the one socket they all inherited).
+
+    Standard fix for async engines + Celery prefork: discard the inherited
+    pool in each freshly-forked child so its first real query opens a
+    genuinely new connection instead of reusing a shared one. `dispose()`
+    on the sync-facing pool is deliberately used here (not the async
+    `engine.dispose()`) — this hook runs before any event loop exists in
+    the child, so there is nothing to await yet; dropping the pool's
+    object references is enough, since nothing in it is actually usable
+    post-fork regardless."""
+    from app.core.database import engine
+    engine.sync_engine.dispose()

@@ -91,6 +91,7 @@ class RuleService:
             entity_id=data.entity_id,
             name=data.name,
             description=data.description,
+            rule_type=data.rule_type.value,
             trigger=data.trigger.model_dump(),
             conditions=data.conditions,
             actions=data.actions,
@@ -112,6 +113,8 @@ class RuleService:
             rule.name = data.name
         if data.description is not None:
             rule.description = data.description
+        if data.rule_type is not None:
+            rule.rule_type = data.rule_type.value
         if data.trigger is not None:
             rule.trigger = data.trigger.model_dump()
         if data.conditions is not None:
@@ -302,6 +305,16 @@ class RuleService:
         every rule's proposed mutations before any of them is persisted.
         """
         rules_raw = await self._get_rules_raw(app_id, active_only=True, entity_id=entity_id)
+        # Validation rules run synchronously in-process, *before* the write
+        # commits (ValidationRuleService — the only place that resolves
+        # their `lookup` condition nodes and knows what `block_save`
+        # means), never via this async batch. The pure interpreter this
+        # batch runs through (app/engine/interpreter.py / expressions.py)
+        # has no "lookup" expression type and no "block_save" action — a
+        # validation rule dispatched here always errors, either on an
+        # unresolved lookup (every validation rule that uses one — which is
+        # most of them, see app/engine/lookup.py) or on the action itself.
+        rules_raw = [r for r in rules_raw if r.get("rule_type") != "validation"]
         if not rules_raw:
             return None
 
@@ -419,6 +432,7 @@ class RuleService:
             {
                 "id": r.id,
                 "entity_id": r.entity_id,
+                "rule_type": r.rule_type,
                 "trigger": r.trigger,
                 "conditions": r.conditions,
                 "actions": r.actions,

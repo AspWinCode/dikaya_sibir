@@ -99,15 +99,37 @@ def _rule_status(outcome: RuleOutcome, persist_error: str | None) -> str:
 
 def _persist_batch(batch: BatchResult, ctx: ExecutionContext, execution_batch_id: str) -> None:
     """Apply the batch's merged mutations, record operations, and conflict
-    log entries in one atomic transaction."""
+    log entries in one atomic transaction.
+
+    Uses its own freshly-created, unpooled engine rather than the app-wide
+    `app.core.database.engine` singleton. This function runs inside
+    `asyncio.run()` (see the bottom of this function) — a brand new event
+    loop on every call, since the Celery task calling it is synchronous
+    and has no loop of its own between invocations. asyncpg connections
+    are not safe to reuse across event loops; reusing the shared engine's
+    pooled connections here reproducibly fails on the second call in a
+    worker process's lifetime with "cannot perform operation: another
+    operation is in progress" / "attached to a different loop" (confirmed
+    end to end against a real worker while building ТЗ item 13's balance
+    rule). NullPool means every connection this engine hands out is closed
+    immediately on release rather than pooled for reuse — the small
+    reconnect cost per call is negligible next to the 113s sandbox budget,
+    and correctness here matters far more than connection-reuse overhead.
+    """
     import asyncio
-    from app.core.database import AsyncSessionLocal
+    from app.core.config import settings
     from app.models.data import Record
     from app.models.logic import RuleConflictLog
     from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    db_url = str(settings.DATABASE_URL).replace("postgresql://", "postgresql+asyncpg://", 1)
 
     async def _run() -> None:
-        async with AsyncSessionLocal() as session:
+        run_engine = create_async_engine(db_url, poolclass=NullPool)
+        run_session_factory = async_sessionmaker(bind=run_engine, class_=AsyncSession, expire_on_commit=False, autoflush=False)
+        async with run_session_factory() as session:
             if batch.applied_mutations and ctx.record_id:
                 stmt = select(Record).where(
                     Record.entity_id == ctx.entity_id,
@@ -230,6 +252,7 @@ def _persist_batch(batch: BatchResult, ctx: ExecutionContext, execution_batch_id
                 )
 
             await session.commit()
+        await run_engine.dispose()
 
     asyncio.run(_run())
 

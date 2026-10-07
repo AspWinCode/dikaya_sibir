@@ -323,18 +323,25 @@ class EntityService:
         if data.from_entity_id == data.to_entity_id:
             raise RelationConflictError("Cannot create a relation from an entity to itself")
 
-        # Reject duplicate: same pair of entities with the same type already exists
+        # Reject an exact duplicate — same pair of entities, same type, same
+        # from_field_name. Deliberately NOT keyed on just (from, to, type):
+        # an entity legitimately needs more than one relation to the same
+        # target under different field names (e.g. a transfer record's
+        # "откуда"/"куда", both one_to_many to the same Помещение entity) —
+        # rejecting those as duplicates was a bug, not a real constraint.
         existing = await self._db.execute(
             select(Relation).where(
                 Relation.app_id == app_id,
                 Relation.from_entity_id == data.from_entity_id,
                 Relation.to_entity_id == data.to_entity_id,
                 Relation.relation_type == data.relation_type.value,
+                Relation.from_field_name == data.from_field_name,
             )
         )
         if existing.scalar_one_or_none() is not None:
             raise RelationConflictError(
-                f"Relation {data.relation_type.value} between these entities already exists"
+                f"Relation {data.relation_type.value} via field "
+                f"{data.from_field_name!r} between these entities already exists"
             )
 
         relation = Relation(
