@@ -5,16 +5,16 @@ real user would use — none of the underlying create/delete endpoints
 (fields, states, transitions) validate these cross-references themselves,
 so the check is the only thing standing between a broken app and publish.
 """
+
 from __future__ import annotations
 
 import uuid
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 pytestmark = pytest.mark.integration
 
@@ -45,7 +45,8 @@ async def _login(client: AsyncClient, email: str, pwd: str) -> str:
 async def _create_app(client: AsyncClient, token: str) -> str:
     slug = f"pub-app-{uuid.uuid4().hex[:6]}"
     r = await client.post(
-        "/api/v1/apps", json={"slug": slug, "name": "Publish Test App"},
+        "/api/v1/apps",
+        json={"slug": slug, "name": "Publish Test App"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 201, r.text
@@ -62,7 +63,9 @@ async def _create_entity(client: AsyncClient, token: str, app_id: str, slug: str
     return r.json()["id"]
 
 
-async def _create_field(client: AsyncClient, token: str, app_id: str, entity_id: str, name: str) -> str:
+async def _create_field(
+    client: AsyncClient, token: str, app_id: str, entity_id: str, name: str
+) -> str:
     r = await client.post(
         f"/api/v1/apps/{app_id}/entities/{entity_id}/fields",
         json={"name": name, "display_name": name, "field_type": "text"},
@@ -124,7 +127,9 @@ async def test_page_missing_entity_id_is_a_warning(client: AsyncClient, builder:
     resp = await client.get(f"/api/v1/apps/{app_id}/publish/check", headers=_headers(token))
     data = resp.json()
     assert data["can_publish"] is True  # warning only
-    assert any(i["category"] == "block_no_source" and i["severity"] == "warning" for i in data["issues"])
+    assert any(
+        i["category"] == "block_no_source" and i["severity"] == "warning" for i in data["issues"]
+    )
 
 
 @pytest.mark.asyncio
@@ -135,7 +140,8 @@ async def test_page_with_dangling_entity_id_is_an_error(client: AsyncClient, bui
     await client.post(
         f"/api/v1/apps/{app_id}/pages",
         json={
-            "slug": "dangling", "title": "Dangling Page",
+            "slug": "dangling",
+            "title": "Dangling Page",
             "layout": {"view_type": "table", "entity_id": str(uuid.uuid4())},
         },
         headers=_headers(token),
@@ -144,11 +150,15 @@ async def test_page_with_dangling_entity_id_is_an_error(client: AsyncClient, bui
     resp = await client.get(f"/api/v1/apps/{app_id}/publish/check", headers=_headers(token))
     data = resp.json()
     assert data["can_publish"] is False
-    assert any(i["category"] == "block_no_source" and i["severity"] == "error" for i in data["issues"])
+    assert any(
+        i["category"] == "block_no_source" and i["severity"] == "error" for i in data["issues"]
+    )
 
 
 @pytest.mark.asyncio
-async def test_block_with_valid_entity_id_is_not_flagged(client: AsyncClient, builder: User) -> None:
+async def test_block_with_valid_entity_id_is_not_flagged(
+    client: AsyncClient, builder: User
+) -> None:
     token = await _login(client, builder.email, "Build1234!")
     app_id = await _create_app(client, token)
     entity_id = await _create_entity(client, token, app_id, "widgets")
@@ -156,7 +166,9 @@ async def test_block_with_valid_entity_id_is_not_flagged(client: AsyncClient, bu
     await client.post(
         f"/api/v1/apps/{app_id}/pages",
         json={
-            "slug": "ok-page", "title": "OK Page", "layout": {},
+            "slug": "ok-page",
+            "title": "OK Page",
+            "layout": {},
             "blocks": [{"id": "b1", "type": "record_card", "config": {"entity_id": entity_id}}],
         },
         headers=_headers(token),
@@ -169,23 +181,42 @@ async def test_block_with_valid_entity_id_is_not_flagged(client: AsyncClient, bu
 
 
 @pytest.mark.asyncio
-async def test_block_with_dangling_entity_id_is_an_error(client: AsyncClient, builder: User) -> None:
+async def test_block_with_dangling_entity_id_is_an_error(
+    client: AsyncClient, builder: User
+) -> None:
+    """A block's entity_id is checked against the app's live entities when
+    the page is saved (ТЗ item 4) — so a block can no longer be created
+    pointing at an entity_id that never existed. This test instead covers
+    the reference going stale AFTER the fact: the entity existed when the
+    block was saved, then got deleted — exactly the case the pre-publish
+    check exists to catch, since nothing re-validates saved pages when an
+    entity disappears."""
     token = await _login(client, builder.email, "Build1234!")
     app_id = await _create_app(client, token)
+    entity_id = await _create_entity(client, token, app_id, "soon_to_be_deleted")
 
     await client.post(
         f"/api/v1/apps/{app_id}/pages",
         json={
-            "slug": "broken-block", "title": "Broken Block", "layout": {},
-            "blocks": [{"id": "b1", "type": "pivot", "config": {"entity_id": str(uuid.uuid4())}}],
+            "slug": "broken-block",
+            "title": "Broken Block",
+            "layout": {},
+            "blocks": [{"id": "b1", "type": "pivot", "config": {"entity_id": entity_id}}],
         },
         headers=_headers(token),
     )
+    del_resp = await client.delete(
+        f"/api/v1/apps/{app_id}/entities/{entity_id}", headers=_headers(token)
+    )
+    assert del_resp.status_code == 204, del_resp.text
 
     resp = await client.get(f"/api/v1/apps/{app_id}/publish/check", headers=_headers(token))
     data = resp.json()
     assert data["can_publish"] is False
-    assert any(i["category"] == "block_no_source" and "b1" == i["location"].get("block_id") for i in data["issues"])
+    assert any(
+        i["category"] == "block_no_source" and i["location"].get("block_id") == "b1"
+        for i in data["issues"]
+    )
 
 
 # ------------------------------------------------------------------
@@ -202,9 +233,12 @@ async def test_active_rule_without_actions_is_a_warning(client: AsyncClient, bui
     rule_resp = await client.post(
         f"/api/v1/apps/{app_id}/rules",
         json={
-            "entity_id": entity_id, "name": "Empty rule",
+            "entity_id": entity_id,
+            "name": "Empty rule",
             "trigger": {"event": "record.created", "watch_fields": []},
-            "conditions": {}, "actions": [], "priority": 10,
+            "conditions": {},
+            "actions": [],
+            "priority": 10,
         },
         headers=_headers(token),
     )
@@ -219,7 +253,9 @@ async def test_active_rule_without_actions_is_a_warning(client: AsyncClient, bui
 
 
 @pytest.mark.asyncio
-async def test_inactive_rule_without_actions_is_not_flagged(client: AsyncClient, builder: User) -> None:
+async def test_inactive_rule_without_actions_is_not_flagged(
+    client: AsyncClient, builder: User
+) -> None:
     """A rule left inactive/in-draft shouldn't block or clutter the check."""
     token = await _login(client, builder.email, "Build1234!")
     app_id = await _create_app(client, token)
@@ -228,9 +264,12 @@ async def test_inactive_rule_without_actions_is_not_flagged(client: AsyncClient,
     await client.post(
         f"/api/v1/apps/{app_id}/rules",
         json={
-            "entity_id": entity_id, "name": "Draft rule",
+            "entity_id": entity_id,
+            "name": "Draft rule",
             "trigger": {"event": "record.created", "watch_fields": []},
-            "conditions": {}, "actions": [], "priority": 10,
+            "conditions": {},
+            "actions": [],
+            "priority": 10,
         },
         headers=_headers(token),
     )
@@ -254,7 +293,14 @@ async def _create_workflow(client: AsyncClient, token: str, app_id: str, entity_
     return r.json()["id"]
 
 
-async def _create_state(client: AsyncClient, token: str, app_id: str, workflow_id: str, name: str, terminal: bool = False) -> str:
+async def _create_state(
+    client: AsyncClient,
+    token: str,
+    app_id: str,
+    workflow_id: str,
+    name: str,
+    terminal: bool = False,
+) -> str:
     r = await client.post(
         f"/api/v1/apps/{app_id}/workflows/{workflow_id}/states",
         json={"name": name, "display_name": name.title(), "is_terminal": terminal},
@@ -265,22 +311,31 @@ async def _create_state(client: AsyncClient, token: str, app_id: str, workflow_i
 
 
 @pytest.mark.asyncio
-async def test_workflow_initial_state_missing_is_an_error(client: AsyncClient, builder: User) -> None:
+async def test_workflow_initial_state_missing_is_an_error(
+    client: AsyncClient, builder: User
+) -> None:
     token = await _login(client, builder.email, "Build1234!")
     app_id = await _create_app(client, token)
     entity_id = await _create_entity(client, token, app_id, "invoices")
     workflow_id = await _create_workflow(client, token, app_id, entity_id)
     # No states created at all — initial_state "draft" doesn't exist.
-    await client.post(f"/api/v1/apps/{app_id}/workflows/{workflow_id}/activate", headers=_headers(token))
+    await client.post(
+        f"/api/v1/apps/{app_id}/workflows/{workflow_id}/activate", headers=_headers(token)
+    )
 
     resp = await client.get(f"/api/v1/apps/{app_id}/publish/check", headers=_headers(token))
     data = resp.json()
     assert data["can_publish"] is False
-    assert any(i["category"] == "workflow_transition" and "начальный этап" in i["message"] for i in data["issues"])
+    assert any(
+        i["category"] == "workflow_transition" and "начальный этап" in i["message"]
+        for i in data["issues"]
+    )
 
 
 @pytest.mark.asyncio
-async def test_workflow_transition_to_nonexistent_state_is_an_error(client: AsyncClient, builder: User) -> None:
+async def test_workflow_transition_to_nonexistent_state_is_an_error(
+    client: AsyncClient, builder: User
+) -> None:
     token = await _login(client, builder.email, "Build1234!")
     app_id = await _create_app(client, token)
     entity_id = await _create_entity(client, token, app_id, "invoices")
@@ -289,11 +344,18 @@ async def test_workflow_transition_to_nonexistent_state_is_an_error(client: Asyn
     # No "approved" state exists — the create_transition endpoint doesn't check this itself.
     tr_resp = await client.post(
         f"/api/v1/apps/{app_id}/workflows/{workflow_id}/transitions",
-        json={"name": "approve", "display_name": "Approve", "from_state": "draft", "to_state": "approved"},
+        json={
+            "name": "approve",
+            "display_name": "Approve",
+            "from_state": "draft",
+            "to_state": "approved",
+        },
         headers=_headers(token),
     )
     assert tr_resp.status_code == 201, tr_resp.text
-    await client.post(f"/api/v1/apps/{app_id}/workflows/{workflow_id}/activate", headers=_headers(token))
+    await client.post(
+        f"/api/v1/apps/{app_id}/workflows/{workflow_id}/activate", headers=_headers(token)
+    )
 
     resp = await client.get(f"/api/v1/apps/{app_id}/publish/check", headers=_headers(token))
     data = resp.json()
@@ -311,18 +373,30 @@ async def test_workflow_dead_end_state_is_a_warning(client: AsyncClient, builder
     entity_id = await _create_entity(client, token, app_id, "invoices")
     workflow_id = await _create_workflow(client, token, app_id, entity_id)
     await _create_state(client, token, app_id, workflow_id, "draft")
-    await _create_state(client, token, app_id, workflow_id, "stuck")  # non-terminal, no outgoing transition
+    await _create_state(
+        client, token, app_id, workflow_id, "stuck"
+    )  # non-terminal, no outgoing transition
     await client.post(
         f"/api/v1/apps/{app_id}/workflows/{workflow_id}/transitions",
-        json={"name": "advance", "display_name": "Advance", "from_state": "draft", "to_state": "stuck"},
+        json={
+            "name": "advance",
+            "display_name": "Advance",
+            "from_state": "draft",
+            "to_state": "stuck",
+        },
         headers=_headers(token),
     )
-    await client.post(f"/api/v1/apps/{app_id}/workflows/{workflow_id}/activate", headers=_headers(token))
+    await client.post(
+        f"/api/v1/apps/{app_id}/workflows/{workflow_id}/activate", headers=_headers(token)
+    )
 
     resp = await client.get(f"/api/v1/apps/{app_id}/publish/check", headers=_headers(token))
     data = resp.json()
     assert data["can_publish"] is True  # dead end is a warning, not an error
-    assert any(i["category"] == "workflow_transition" and i["severity"] == "warning" for i in data["issues"])
+    assert any(
+        i["category"] == "workflow_transition" and i["severity"] == "warning"
+        for i in data["issues"]
+    )
 
 
 @pytest.mark.asyncio
@@ -335,10 +409,17 @@ async def test_well_formed_workflow_is_not_flagged(client: AsyncClient, builder:
     await _create_state(client, token, app_id, workflow_id, "approved", terminal=True)
     await client.post(
         f"/api/v1/apps/{app_id}/workflows/{workflow_id}/transitions",
-        json={"name": "approve", "display_name": "Approve", "from_state": "draft", "to_state": "approved"},
+        json={
+            "name": "approve",
+            "display_name": "Approve",
+            "from_state": "draft",
+            "to_state": "approved",
+        },
         headers=_headers(token),
     )
-    await client.post(f"/api/v1/apps/{app_id}/workflows/{workflow_id}/activate", headers=_headers(token))
+    await client.post(
+        f"/api/v1/apps/{app_id}/workflows/{workflow_id}/activate", headers=_headers(token)
+    )
 
     resp = await client.get(f"/api/v1/apps/{app_id}/publish/check", headers=_headers(token))
     assert resp.json()["issues"] == []
@@ -350,7 +431,9 @@ async def test_well_formed_workflow_is_not_flagged(client: AsyncClient, builder:
 
 
 @pytest.mark.asyncio
-async def test_relation_field_deleted_after_creation_is_an_error(client: AsyncClient, builder: User) -> None:
+async def test_relation_field_deleted_after_creation_is_an_error(
+    client: AsyncClient, builder: User
+) -> None:
     token = await _login(client, builder.email, "Build1234!")
     app_id = await _create_app(client, token)
     parent_id = await _create_entity(client, token, app_id, "parent")
@@ -360,8 +443,10 @@ async def test_relation_field_deleted_after_creation_is_an_error(client: AsyncCl
     rel_resp = await client.post(
         f"/api/v1/apps/{app_id}/relations",
         json={
-            "from_entity_id": child_id, "to_entity_id": parent_id,
-            "relation_type": "one_to_many", "from_field_name": "parent_ref",
+            "from_entity_id": child_id,
+            "to_entity_id": parent_id,
+            "relation_type": "one_to_many",
+            "from_field_name": "parent_ref",
         },
         headers=_headers(token),
     )
@@ -369,7 +454,8 @@ async def test_relation_field_deleted_after_creation_is_an_error(client: AsyncCl
 
     # Nothing stops deleting a field a relation still points at.
     del_resp = await client.delete(
-        f"/api/v1/apps/{app_id}/entities/{child_id}/fields/{field_id}", headers=_headers(token),
+        f"/api/v1/apps/{app_id}/entities/{child_id}/fields/{field_id}",
+        headers=_headers(token),
     )
     assert del_resp.status_code == 204, del_resp.text
 
@@ -380,7 +466,9 @@ async def test_relation_field_deleted_after_creation_is_an_error(client: AsyncCl
 
 
 @pytest.mark.asyncio
-async def test_relation_with_existing_field_is_not_flagged(client: AsyncClient, builder: User) -> None:
+async def test_relation_with_existing_field_is_not_flagged(
+    client: AsyncClient, builder: User
+) -> None:
     token = await _login(client, builder.email, "Build1234!")
     app_id = await _create_app(client, token)
     parent_id = await _create_entity(client, token, app_id, "parent2")
@@ -390,8 +478,10 @@ async def test_relation_with_existing_field_is_not_flagged(client: AsyncClient, 
     await client.post(
         f"/api/v1/apps/{app_id}/relations",
         json={
-            "from_entity_id": child_id, "to_entity_id": parent_id,
-            "relation_type": "one_to_many", "from_field_name": "parent_ref",
+            "from_entity_id": child_id,
+            "to_entity_id": parent_id,
+            "relation_type": "one_to_many",
+            "from_field_name": "parent_ref",
         },
         headers=_headers(token),
     )
@@ -412,7 +502,8 @@ async def test_publish_blocked_returns_422_with_issues(client: AsyncClient, buil
     await client.post(
         f"/api/v1/apps/{app_id}/pages",
         json={
-            "slug": "broken", "title": "Broken",
+            "slug": "broken",
+            "title": "Broken",
             "layout": {"view_type": "table", "entity_id": str(uuid.uuid4())},
         },
         headers=_headers(token),

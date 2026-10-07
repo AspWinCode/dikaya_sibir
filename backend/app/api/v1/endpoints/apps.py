@@ -59,14 +59,15 @@ async def list_apps(
         limit=limit,
         search=search,
         include_archived=include_archived,
-        actor_org_id=current_user.org_id,
     )
 
 
 @router.post("", response_model=AppRead, status_code=status.HTTP_201_CREATED)
 async def create_app(body: AppCreate, current_user: AuthDep, db: DbDep) -> AppRead:
     if not current_user.has_role("platform_admin", "app_builder", "org_admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
     try:
         return await AppService(db).create_app(
             body, owner_id=current_user.user_id, org_id=current_user.org_id
@@ -79,7 +80,8 @@ async def create_app(body: AppCreate, current_user: AuthDep, db: DbDep) -> AppRe
 async def get_app(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> AppRead:
     try:
         return await AppService(db).get_app(
-            app_id, actor_id=current_user.user_id,
+            app_id,
+            actor_id=current_user.user_id,
         )
     except AppNotFoundError as exc:
         raise _not_found() from exc
@@ -90,13 +92,17 @@ async def update_app(
     app_id: uuid.UUID, body: AppUpdate, current_user: AuthDep, db: DbDep, redis: RedisDep
 ) -> AppRead:
     lock = EditLock(
-        redis, "app", app_id, current_user.user_id,
+        redis,
+        "app",
+        app_id,
+        current_user.user_id,
         holder_name=str(current_user.user_id),
     )
     try:
         async with lock:
             return await AppService(db).update_app(
-                app_id, body,
+                app_id,
+                body,
                 actor_id=current_user.user_id,
             )
     except LockConflictError as exc:
@@ -114,7 +120,8 @@ async def update_app(
 async def delete_app(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> None:
     try:
         await AppService(db).delete_app(
-            app_id, actor_id=current_user.user_id,
+            app_id,
+            actor_id=current_user.user_id,
         )
     except AppNotFoundError as exc:
         raise _not_found() from exc
@@ -127,7 +134,7 @@ async def check_publish(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> 
     """Dry-run the pre-publish integrity check (ТЗ 3.11.1) — lets the editor
     show issues before the user commits to publishing."""
     try:
-        return await AppService(db).check_publish(app_id)
+        return await AppService(db).check_publish(app_id, actor_id=current_user.user_id)
     except AppNotFoundError as exc:
         raise _not_found() from exc
 
@@ -136,7 +143,8 @@ async def check_publish(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> 
 async def publish_app(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> AppRead:
     try:
         return await AppService(db).publish_app(
-            app_id, actor_id=current_user.user_id,
+            app_id,
+            actor_id=current_user.user_id,
         )
     except AppNotFoundError as exc:
         raise _not_found() from exc
@@ -153,6 +161,7 @@ async def publish_app(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> Ap
 
 
 # ---- Clone ----
+
 
 @router.post("/{app_id}/clone", response_model=AppRead, status_code=status.HTTP_201_CREATED)
 async def clone_app(
@@ -175,6 +184,7 @@ async def clone_app(
 
 # ---- Snapshots ----
 
+
 @router.get("/{app_id}/snapshots", response_model=list[AppSnapshotRead])
 async def list_snapshots(
     app_id: uuid.UUID, current_user: AuthDep, db: DbDep
@@ -190,7 +200,9 @@ async def list_snapshots(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
 
-@router.post("/{app_id}/snapshots", response_model=AppSnapshotRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{app_id}/snapshots", response_model=AppSnapshotRead, status_code=status.HTTP_201_CREATED
+)
 async def create_snapshot(
     app_id: uuid.UUID, body: AppSnapshotCreate, current_user: AuthDep, db: DbDep
 ) -> AppSnapshotRead:
@@ -227,6 +239,7 @@ async def rollback_snapshot(
 
 # ---- Members ----
 
+
 @router.get("/{app_id}/members", response_model=list[AppMemberRead])
 async def list_members(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> list[AppMemberRead]:
     try:
@@ -241,10 +254,13 @@ async def list_members(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> l
 
 
 @router.post("/{app_id}/members", status_code=status.HTTP_204_NO_CONTENT)
-async def add_member(app_id: uuid.UUID, body: AppMemberAdd, current_user: AuthDep, db: DbDep) -> None:
+async def add_member(
+    app_id: uuid.UUID, body: AppMemberAdd, current_user: AuthDep, db: DbDep
+) -> None:
     try:
         await AppService(db).add_member(
-            app_id, body,
+            app_id,
+            body,
             actor_id=current_user.user_id,
         )
     except AppNotFoundError as exc:
@@ -259,7 +275,8 @@ async def remove_member(
 ) -> None:
     try:
         await AppService(db).remove_member(
-            app_id, user_id,
+            app_id,
+            user_id,
             actor_id=current_user.user_id,
         )
     except AppNotFoundError as exc:
@@ -269,6 +286,7 @@ async def remove_member(
 
 
 # ---- Recycle bin (ТЗ 3.9.1) ----
+
 
 @router.get("/{app_id}/recycle-bin", response_model=CursorPage[TrashedRecordRead])
 async def list_recycle_bin(
@@ -283,24 +301,39 @@ async def list_recycle_bin(
     the DELETE endpoint's include_deleted=true mixes deleted rows into one
     entity's normal listing; this is a dedicated «Корзина» view."""
     if not current_user.has_role("platform_admin", "app_admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Recycle bin access requires an admin role")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Recycle bin access requires an admin role",
+        )
     try:
         await _svc(db).get_app(
-            app_id, actor_id=current_user.user_id,
+            app_id,
+            actor_id=current_user.user_id,
         )
     except AppNotFoundError as exc:
         raise _not_found() from exc
 
     from app.services.records import RecordService
+
     return await RecordService(db).list_deleted_records(
-        app_id, entity_id=entity_id, limit=limit, cursor=cursor,
+        app_id,
+        entity_id=entity_id,
+        limit=limit,
+        cursor=cursor,
     )
 
 
 # ---- Edit lock (heartbeat / status) ----
 
+
 @router.get("/{app_id}/lock", response_model=LockInfo | None, tags=["locks"])
-async def get_lock_info(app_id: uuid.UUID, current_user: AuthDep, redis: RedisDep) -> LockInfo | None:
+async def get_lock_info(
+    app_id: uuid.UUID, current_user: AuthDep, db: DbDep, redis: RedisDep
+) -> LockInfo | None:
+    try:
+        await AppService(db).require_member(app_id, actor_id=current_user.user_id)
+    except AppNotFoundError as exc:
+        raise _not_found() from exc
     lock = EditLock(redis, "app", app_id, current_user.user_id)
     info = await lock.get_info()
     if info is None:
@@ -309,7 +342,15 @@ async def get_lock_info(app_id: uuid.UUID, current_user: AuthDep, redis: RedisDe
 
 
 @router.post("/{app_id}/lock", status_code=status.HTTP_204_NO_CONTENT, tags=["locks"])
-async def acquire_lock(app_id: uuid.UUID, current_user: AuthDep, redis: RedisDep) -> None:
+async def acquire_lock(
+    app_id: uuid.UUID, current_user: AuthDep, db: DbDep, redis: RedisDep
+) -> None:
+    try:
+        await AppService(db).require_edit_access(app_id, actor_id=current_user.user_id)
+    except AppNotFoundError as exc:
+        raise _not_found() from exc
+    except AppPermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     lock = EditLock(redis, "app", app_id, current_user.user_id)
     try:
         await lock.acquire()
@@ -321,6 +362,14 @@ async def acquire_lock(app_id: uuid.UUID, current_user: AuthDep, redis: RedisDep
 
 
 @router.delete("/{app_id}/lock", status_code=status.HTTP_204_NO_CONTENT, tags=["locks"])
-async def release_lock(app_id: uuid.UUID, current_user: AuthDep, redis: RedisDep) -> None:
+async def release_lock(
+    app_id: uuid.UUID, current_user: AuthDep, db: DbDep, redis: RedisDep
+) -> None:
+    try:
+        await AppService(db).require_edit_access(app_id, actor_id=current_user.user_id)
+    except AppNotFoundError as exc:
+        raise _not_found() from exc
+    except AppPermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     lock = EditLock(redis, "app", app_id, current_user.user_id)
     await lock.release()

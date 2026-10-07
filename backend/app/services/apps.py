@@ -3,7 +3,7 @@ from datetime import datetime
 
 import sqlalchemy as sa
 import structlog
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -42,6 +42,7 @@ class AppPublishBlockedError(Exception):
     """Raised when the pre-publish integrity check (ТЗ 3.11.1) finds
     error-severity issues. Carries the full check result so the caller can
     show every issue, not just the fact that publishing was blocked."""
+
     def __init__(self, issues: list) -> None:
         self.issues = issues
         super().__init__(f"Publication blocked by {len(issues)} integrity issue(s)")
@@ -49,12 +50,14 @@ class AppPublishBlockedError(Exception):
 
 def _encode_cursor(app_id: uuid.UUID, created_at: datetime) -> str:
     import base64
+
     raw = f"{created_at.isoformat()}|{app_id}"
     return base64.urlsafe_b64encode(raw.encode()).decode()
 
 
 def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
     import base64
+
     raw = base64.urlsafe_b64decode(cursor.encode()).decode()
     ts, uid = raw.split("|", 1)
     return datetime.fromisoformat(ts), uuid.UUID(uid)
@@ -62,6 +65,7 @@ def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
 
 def _slugify(name: str) -> str:
     import re
+
     base = re.sub(r"[^a-z0-9]+", "-", name.lower().strip()).strip("-")
     safe = base if len(base) >= 2 else f"app-{base}"
     return f"{safe}-{uuid.uuid4().hex[:6]}"
@@ -78,25 +82,22 @@ class AppService:
         limit: int = 50,
         search: str | None = None,
         include_archived: bool = False,
-        actor_org_id: uuid.UUID | None = None,
     ) -> CursorPage[AppRead]:
-        # Deliberately no platform_admin bypass: holding the platform_admin
-        # role manages the platform, not an automatic membership in every
-        # app. An app-level AppMember row (or org scoping) is required to
-        # see an app here, same as everyone else.
+        # Deliberately no platform_admin/org-wide bypass: holding the
+        # platform_admin role, or merely belonging to the same org, manages
+        # the platform/org, not an automatic membership in every app in it.
+        # An app-level AppMember row (or being the owner) is required to see
+        # an app here, same as everyone else — "can view org metadata" and
+        # "can open this app's editor/runtime/data" are different questions;
+        # an org-wide admin listing, if ever needed, belongs in its own
+        # endpoint rather than silently widening this one.
         stmt = select(App).order_by(App.created_at.asc(), App.id.asc())
-
-        if actor_org_id is not None:
-            stmt = stmt.where(App.org_id == actor_org_id)
-        else:
-            stmt = stmt.where(
-                or_(
-                    App.owner_id == actor_id,
-                    App.id.in_(
-                        select(AppMember.app_id).where(AppMember.user_id == actor_id)
-                    ),
-                )
+        stmt = stmt.where(
+            or_(
+                App.owner_id == actor_id,
+                App.id.in_(select(AppMember.app_id).where(AppMember.user_id == actor_id)),
             )
+        )
 
         if not include_archived:
             stmt = stmt.where(App.is_archived.is_(False))
@@ -160,9 +161,7 @@ class AppService:
         logger.info("app_created", app_id=str(app.id), slug=app.slug, owner=str(owner_id))
         return AppRead.model_validate(app)
 
-    async def update_app(
-        self, app_id: uuid.UUID, data: AppUpdate, actor_id: uuid.UUID
-    ) -> AppRead:
+    async def update_app(self, app_id: uuid.UUID, data: AppUpdate, actor_id: uuid.UUID) -> AppRead:
         app = await self._fetch_app(app_id)
         await self._require_role(app_id, actor_id, {"owner", "admin"})
 
@@ -191,20 +190,22 @@ class AppService:
         await self._db.flush()
         logger.info("app_archived", app_id=str(app_id))
 
-    async def check_publish(self, app_id: uuid.UUID) -> PublishCheckResult:
+    async def check_publish(self, app_id: uuid.UUID, actor_id: uuid.UUID) -> PublishCheckResult:
         """Dry-run the pre-publish integrity check (ТЗ 3.11.1) without
-        publishing — lets the UI show issues before the user commits."""
+        publishing — lets the UI show issues before the user commits.
+        Read access only (any member role), same as viewing the app itself."""
         await self._fetch_app(app_id)
+        await self._require_member(app_id, actor_id)
         from app.services.publish_validation import PublishValidationService
+
         return await PublishValidationService(self._db).check(app_id)
 
-    async def publish_app(
-        self, app_id: uuid.UUID, actor_id: uuid.UUID
-    ) -> AppRead:
+    async def publish_app(self, app_id: uuid.UUID, actor_id: uuid.UUID) -> AppRead:
         app = await self._fetch_app(app_id)
         await self._require_role(app_id, actor_id, {"owner", "admin"})
 
         from app.services.publish_validation import PublishValidationService
+
         check = await PublishValidationService(self._db).check(app_id)
         if not check.can_publish:
             raise AppPublishBlockedError(check.issues)
@@ -277,22 +278,24 @@ class AppService:
             for field in entity.fields:
                 new_field_id = uuid.uuid4()
                 field_id_map[field.id] = new_field_id
-                self._db.add(Field(
-                    id=new_field_id,
-                    entity_id=new_entity_id,
-                    app_id=new_app.id,
-                    name=field.name,
-                    display_name=field.display_name,
-                    field_type=field.field_type,
-                    is_required=field.is_required,
-                    is_unique=field.is_unique,
-                    is_system=field.is_system,
-                    is_indexed=field.is_indexed,
-                    default_value=dict(field.default_value) if field.default_value else None,
-                    validation_rules=dict(field.validation_rules or {}),
-                    field_options=dict(field.field_options or {}),
-                    display_order=field.display_order,
-                ))
+                self._db.add(
+                    Field(
+                        id=new_field_id,
+                        entity_id=new_entity_id,
+                        app_id=new_app.id,
+                        name=field.name,
+                        display_name=field.display_name,
+                        field_type=field.field_type,
+                        is_required=field.is_required,
+                        is_unique=field.is_unique,
+                        is_system=field.is_system,
+                        is_indexed=field.is_indexed,
+                        default_value=dict(field.default_value) if field.default_value else None,
+                        validation_rules=dict(field.validation_rules or {}),
+                        field_options=dict(field.field_options or {}),
+                        display_order=field.display_order,
+                    )
+                )
                 new_field_ids.append(new_field_id)
 
             # Remap field_order
@@ -306,23 +309,23 @@ class AppService:
         await self._db.flush()
 
         # Clone relations
-        rel_result = await self._db.execute(
-            select(Relation).where(Relation.app_id == app_id)
-        )
+        rel_result = await self._db.execute(select(Relation).where(Relation.app_id == app_id))
         for rel in rel_result.scalars().all():
             new_from = entity_id_map.get(rel.from_entity_id)
             new_to = entity_id_map.get(rel.to_entity_id)
             if new_from and new_to:
-                self._db.add(Relation(
-                    app_id=new_app.id,
-                    from_entity_id=new_from,
-                    to_entity_id=new_to,
-                    relation_type=rel.relation_type,
-                    from_field_name=rel.from_field_name,
-                    to_field_name=rel.to_field_name,
-                    display_name=rel.display_name,
-                    settings=dict(rel.settings or {}),
-                ))
+                self._db.add(
+                    Relation(
+                        app_id=new_app.id,
+                        from_entity_id=new_from,
+                        to_entity_id=new_to,
+                        relation_type=rel.relation_type,
+                        from_field_name=rel.from_field_name,
+                        to_field_name=rel.to_field_name,
+                        display_name=rel.display_name,
+                        settings=dict(rel.settings or {}),
+                    )
+                )
 
         await self._db.flush()
         logger.info("app_cloned", source_id=str(app_id), new_id=str(new_app.id))
@@ -343,8 +346,9 @@ class AppService:
 
         # Next sequential snapshot number for this app
         num_result = await self._db.execute(
-            select(func.coalesce(func.max(AppSnapshot.snapshot_num), 0))
-            .where(AppSnapshot.app_id == app_id)
+            select(func.coalesce(func.max(AppSnapshot.snapshot_num), 0)).where(
+                AppSnapshot.app_id == app_id
+            )
         )
         next_num = (num_result.scalar() or 0) + 1
 
@@ -403,9 +407,7 @@ class AppService:
         logger.info("snapshot_created", app_id=str(app_id), snapshot_num=next_num)
         return AppSnapshotRead.model_validate(snapshot)
 
-    async def list_snapshots(
-        self, app_id: uuid.UUID, actor_id: uuid.UUID
-    ) -> list[AppSnapshotRead]:
+    async def list_snapshots(self, app_id: uuid.UUID, actor_id: uuid.UUID) -> list[AppSnapshotRead]:
         await self._fetch_app(app_id)
         await self._require_member(app_id, actor_id)
         result = await self._db.execute(
@@ -466,22 +468,24 @@ class AppService:
             await self._db.flush()
 
             for field_data in entity_data.get("fields", []):
-                self._db.add(Field(
-                    id=uuid.UUID(field_data["id"]),
-                    entity_id=new_entity.id,
-                    app_id=app_id,
-                    name=field_data["name"],
-                    display_name=field_data["display_name"],
-                    field_type=field_data["field_type"],
-                    is_required=field_data.get("is_required", False),
-                    is_unique=field_data.get("is_unique", False),
-                    is_system=field_data.get("is_system", False),
-                    is_indexed=field_data.get("is_indexed", False),
-                    default_value=field_data.get("default_value"),
-                    validation_rules=dict(field_data.get("validation_rules") or {}),
-                    field_options=dict(field_data.get("field_options") or {}),
-                    display_order=field_data.get("display_order", 0),
-                ))
+                self._db.add(
+                    Field(
+                        id=uuid.UUID(field_data["id"]),
+                        entity_id=new_entity.id,
+                        app_id=app_id,
+                        name=field_data["name"],
+                        display_name=field_data["display_name"],
+                        field_type=field_data["field_type"],
+                        is_required=field_data.get("is_required", False),
+                        is_unique=field_data.get("is_unique", False),
+                        is_system=field_data.get("is_system", False),
+                        is_indexed=field_data.get("is_indexed", False),
+                        default_value=field_data.get("default_value"),
+                        validation_rules=dict(field_data.get("validation_rules") or {}),
+                        field_options=dict(field_data.get("field_options") or {}),
+                        display_order=field_data.get("display_order", 0),
+                    )
+                )
 
         await self._db.flush()
         await self._db.refresh(app)
@@ -507,13 +511,15 @@ class AppService:
         )
         result = []
         for member, user in rows.all():
-            result.append(AppMemberRead(
-                user_id=member.user_id,
-                role=member.role,
-                granted_at=member.granted_at,
-                email=user.email,
-                display_name=user.display_name,
-            ))
+            result.append(
+                AppMemberRead(
+                    user_id=member.user_id,
+                    role=member.role,
+                    granted_at=member.granted_at,
+                    email=user.email,
+                    display_name=user.display_name,
+                )
+            )
         return result
 
     async def add_member(
@@ -526,9 +532,7 @@ class AppService:
         await self._require_role(app_id, actor_id, {"owner", "admin"})
 
         existing = await self._db.execute(
-            select(AppMember).where(
-                AppMember.app_id == app_id, AppMember.user_id == data.user_id
-            )
+            select(AppMember).where(AppMember.app_id == app_id, AppMember.user_id == data.user_id)
         )
         member = existing.scalar_one_or_none()
         if member:
@@ -552,9 +556,7 @@ class AppService:
     ) -> None:
         await self._require_role(app_id, actor_id, {"owner", "admin"})
         result = await self._db.execute(
-            select(AppMember).where(
-                AppMember.app_id == app_id, AppMember.user_id == user_id
-            )
+            select(AppMember).where(AppMember.app_id == app_id, AppMember.user_id == user_id)
         )
         member = result.scalar_one_or_none()
         if member:
@@ -582,25 +584,31 @@ class AppService:
             raise AppNotFoundError(str(app_id))
         return app
 
+    async def require_member(self, app_id: uuid.UUID, actor_id: uuid.UUID) -> None:
+        """Public entry point for endpoints that need a bare membership
+        check (any role) without fetching/returning the app itself — e.g.
+        the edit-lock status endpoint."""
+        await self._fetch_app(app_id)
+        await self._require_member(app_id, actor_id)
+
+    async def require_edit_access(self, app_id: uuid.UUID, actor_id: uuid.UUID) -> None:
+        """Public entry point for endpoints gating on 'can edit this app's
+        content' (owner/admin/editor) — e.g. acquiring/releasing the edit
+        lock. Mirrors the role set ModuleService uses for the same concept."""
+        await self._fetch_app(app_id)
+        await self._require_role(app_id, actor_id, {"owner", "admin", "editor"})
+
     async def _require_member(self, app_id: uuid.UUID, user_id: uuid.UUID) -> None:
         result = await self._db.execute(
-            select(AppMember).where(
-                AppMember.app_id == app_id, AppMember.user_id == user_id
-            )
+            select(AppMember).where(AppMember.app_id == app_id, AppMember.user_id == user_id)
         )
         if result.scalar_one_or_none() is None:
             raise AppNotFoundError(str(app_id))
 
-    async def _require_role(
-        self, app_id: uuid.UUID, user_id: uuid.UUID, allowed: set[str]
-    ) -> None:
+    async def _require_role(self, app_id: uuid.UUID, user_id: uuid.UUID, allowed: set[str]) -> None:
         result = await self._db.execute(
-            select(AppMember).where(
-                AppMember.app_id == app_id, AppMember.user_id == user_id
-            )
+            select(AppMember).where(AppMember.app_id == app_id, AppMember.user_id == user_id)
         )
         member = result.scalar_one_or_none()
         if member is None or member.role not in allowed:
-            raise AppPermissionError(
-                f"Role {member.role if member else 'none'!r} not in {allowed}"
-            )
+            raise AppPermissionError(f"Role {member.role if member else 'none'!r} not in {allowed}")
