@@ -124,13 +124,19 @@ def _ctx(balance_entity_id: uuid.UUID) -> ExecutionContext:
 async def test_upsert_creates_a_new_balance_row_when_none_matches(
     db_session: AsyncSession, balance_entity_id: uuid.UUID
 ) -> None:
+    # Values are strings here deliberately — a real rule's `payload`/
+    # `increment` comes from evaluate()'ing field_ref() against the
+    # triggering record, and record payloads store every field value as a
+    # JSON string (confirmed on prod data: jsonb_typeof is "string", not
+    # "number", regardless of field type). Using Python ints here would
+    # hide exactly the bug this file is meant to catch.
     batch = BatchResult(
         records_to_create=[
             {
                 "entity_id": str(balance_entity_id),
-                "payload": {"product_id": "prod-1", "location_id": "loc-1", "quantity": 10},
+                "payload": {"product_id": "prod-1", "location_id": "loc-1", "quantity": "10"},
                 "match": {"product_id": "prod-1", "location_id": "loc-1"},
-                "increment": {"quantity": 10},
+                "increment": {"quantity": 10.0},
             }
         ]
     )
@@ -142,7 +148,7 @@ async def test_upsert_creates_a_new_balance_row_when_none_matches(
         .all()
     )
     assert len(rows) == 1
-    assert rows[0].payload["quantity"] == 10
+    assert rows[0].payload["quantity"] == "10"
 
 
 @pytest.mark.asyncio
@@ -153,7 +159,7 @@ async def test_upsert_increments_the_existing_row_instead_of_duplicating(
     action = {
         "entity_id": str(balance_entity_id),
         "match": {"product_id": "prod-2", "location_id": "loc-A"},
-        "increment": {"quantity": 5},
+        "increment": {"quantity": 5.0},
     }
 
     # First receipt: +5 at loc-A — no row exists yet, creates one.
@@ -162,14 +168,19 @@ async def test_upsert_increments_the_existing_row_instead_of_duplicating(
             records_to_create=[
                 {
                     **action,
-                    "payload": {"product_id": "prod-2", "location_id": "loc-A", "quantity": 5},
+                    "payload": {"product_id": "prod-2", "location_id": "loc-A", "quantity": "5"},
                 }
             ]
         ),
         ctx,
         "batch-2a",
     )
-    # Second receipt: +5 more at the same product/location.
+    # Second receipt: +5 more at the same product/location — the existing
+    # row's "quantity" is a string at this point, same as every record
+    # payload on prod; the increment delta is a float, same as evaluate()
+    # actually returns. This combination is what crashed in production
+    # (ТЗ item 13's second write onto an already-upserted balance row):
+    # "TypeError: can only concatenate str (not 'float') to str".
     await _persist(BatchResult(records_to_create=[action]), ctx, "batch-2b")
 
     rows = (
@@ -184,8 +195,50 @@ async def test_upsert_increments_the_existing_row_instead_of_duplicating(
         .all()
     )
     assert len(rows) == 1  # not duplicated
-    assert rows[0].payload["quantity"] == 10  # 5 + 5
+    assert rows[0].payload["quantity"] == "10"  # 5 + 5, stored back as a string
     assert rows[0].version == 2  # incremented, not recreated
+
+
+@pytest.mark.asyncio
+async def test_upsert_increment_handles_a_negative_float_delta_against_a_string_balance(
+    db_session: AsyncSession, balance_entity_id: uuid.UUID
+) -> None:
+    """The exact shape of a transfer's decrement side: an existing balance
+    row (string quantity) hit with a negative float delta. Regression test
+    for the prod incident this file's other tests should have caught but
+    didn't, because they built BatchResult with Python numbers instead of
+    the strings a real rule evaluation actually produces."""
+    ctx = _ctx(balance_entity_id)
+    seed = {
+        "entity_id": str(balance_entity_id),
+        "payload": {"product_id": "prod-4", "location_id": "loc-X", "quantity": "25"},
+        "match": {"product_id": "prod-4", "location_id": "loc-X"},
+        "increment": {"quantity": 25.0},
+    }
+    await _persist(BatchResult(records_to_create=[seed]), ctx, "batch-4a")
+
+    decrement = {
+        "entity_id": str(balance_entity_id),
+        "match": {"product_id": "prod-4", "location_id": "loc-X"},
+        "increment": {"quantity": -10.0},
+    }
+    await _persist(BatchResult(records_to_create=[decrement]), ctx, "batch-4b")
+
+    rows = (
+        (
+            await db_session.execute(
+                select(Record).where(
+                    Record.entity_id == balance_entity_id,
+                    Record.is_deleted.is_(False),
+                    Record.payload["location_id"].astext == "loc-X",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].payload["quantity"] == "15"
 
 
 @pytest.mark.asyncio
@@ -204,10 +257,10 @@ async def test_upsert_treats_different_locations_as_different_balance_rows(
                     "payload": {
                         "product_id": "prod-3",
                         "location_id": "warehouse-A",
-                        "quantity": 20,
+                        "quantity": "20",
                     },
                     "match": {"product_id": "prod-3", "location_id": "warehouse-A"},
-                    "increment": {"quantity": 20},
+                    "increment": {"quantity": 20.0},
                 }
             ]
         ),
@@ -224,20 +277,20 @@ async def test_upsert_treats_different_locations_as_different_balance_rows(
                     "payload": {
                         "product_id": "prod-3",
                         "location_id": "warehouse-A",
-                        "quantity": -8,
+                        "quantity": "-8",
                     },
                     "match": {"product_id": "prod-3", "location_id": "warehouse-A"},
-                    "increment": {"quantity": -8},
+                    "increment": {"quantity": -8.0},
                 },
                 {
                     "entity_id": str(balance_entity_id),
                     "payload": {
                         "product_id": "prod-3",
                         "location_id": "warehouse-B",
-                        "quantity": 8,
+                        "quantity": "8",
                     },
                     "match": {"product_id": "prod-3", "location_id": "warehouse-B"},
-                    "increment": {"quantity": 8},
+                    "increment": {"quantity": 8.0},
                 },
             ]
         ),
@@ -257,4 +310,4 @@ async def test_upsert_treats_different_locations_as_different_balance_rows(
         .all()
     )
     by_location = {r.payload["location_id"]: r.payload["quantity"] for r in rows}
-    assert by_location == {"warehouse-A": 12, "warehouse-B": 8}
+    assert by_location == {"warehouse-A": "12", "warehouse-B": "8"}

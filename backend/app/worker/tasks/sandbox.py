@@ -169,7 +169,26 @@ def _persist_batch(batch: BatchResult, ctx: ExecutionContext, execution_batch_id
                         increment = rec_create.get("increment") or {}
                         new_payload = dict(existing.payload)
                         for k, delta in increment.items():
-                            new_payload[k] = (new_payload.get(k) or 0) + delta
+                            # Record payloads store numeric field values as
+                            # JSON strings (whatever a form input's text
+                            # sent), not JSON numbers — confirmed on prod
+                            # data, not an assumption. `delta` is a float
+                            # from expression evaluation, so adding it to
+                            # the raw string blew up with "can only
+                            # concatenate str (not 'float') to str" the
+                            # first time an upsert actually hit an existing
+                            # row (ТЗ item 13's second balance-affecting
+                            # write onto the same product+location).
+                            current_raw = new_payload.get(k)
+                            current_num = (
+                                0.0
+                                if current_raw is None or current_raw == ""
+                                else float(current_raw)
+                            )
+                            result = current_num + float(delta)
+                            new_payload[k] = (
+                                str(int(result)) if result == int(result) else str(result)
+                            )
                         existing.payload = new_payload
                         existing.updated_by = ctx.actor_id
                         existing.version += 1
@@ -278,14 +297,30 @@ def _write_execution_logs(
 ) -> None:
     """Write one RuleExecutionLog row per rule (best-effort, non-blocking —
     mirrors the old per-rule task's behavior of always leaving an audit
-    trail even when persistence itself failed)."""
+    trail even when persistence itself failed). Uses its own NullPool
+    engine for the same reason _persist_batch does — the shared
+    app.core.database engine's pooled asyncpg connections aren't safe to
+    reuse across the fresh event loop asyncio.run() creates on every call
+    (see _persist_batch's docstring). Confirmed on prod: before this fix,
+    every RuleExecutionLog write here failed silently with "attached to a
+    different loop" on the second call in a worker process's lifetime,
+    so the table stayed empty regardless of whether rules actually ran."""
     import asyncio
 
-    from app.core.database import AsyncSessionLocal
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from app.core.config import settings
     from app.models.logic import RuleExecutionLog
 
+    db_url = str(settings.DATABASE_URL).replace("postgresql://", "postgresql+asyncpg://", 1)
+
     async def _run() -> None:
-        async with AsyncSessionLocal() as session:
+        run_engine = create_async_engine(db_url, poolclass=NullPool)
+        run_session_factory = async_sessionmaker(
+            bind=run_engine, class_=AsyncSession, expire_on_commit=False, autoflush=False
+        )
+        async with run_session_factory() as session:
             for outcome in batch.outcomes:
                 status = _rule_status(outcome, persist_error)
                 output = None
@@ -315,6 +350,7 @@ def _write_execution_logs(
                     )
                 )
             await session.commit()
+        await run_engine.dispose()
 
     try:
         asyncio.run(_run())
