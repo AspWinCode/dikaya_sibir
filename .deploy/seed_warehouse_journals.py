@@ -10,9 +10,12 @@ Idempotent — every create step first checks for an existing slug/name
 and skips it. Safe to run repeatedly; re-running after a partial
 failure resumes from where it left off.
 
-Run with: python .deploy/seed_warehouse_journals.py
-Target server/credentials: same env vars as seed_vyezdnoy_master.py
-(BASE, EMAIL, PASSWORD below) — override via environment if needed.
+Run with:
+  SEED_ADMIN_EMAIL=... SEED_ADMIN_PASSWORD=... python .deploy/seed_warehouse_journals.py
+SEED_API_BASE defaults to http://localhost:8000/api/v1; override for a
+different target. SEED_ADMIN_EMAIL/SEED_ADMIN_PASSWORD have no default —
+the script refuses to run without them so no credential ever needs to
+live in source, not even as a "convenience" fallback.
 """
 import json
 import os
@@ -22,9 +25,14 @@ import urllib.error
 import urllib.request
 
 BASE = os.environ.get("SEED_API_BASE", "http://localhost:8000/api/v1")
-EMAIL = os.environ.get("SEED_ADMIN_EMAIL", "admin@lesovik.app")
-PASSWORD = os.environ.get("SEED_ADMIN_PASSWORD", "Lesovik!Admin2026")
+EMAIL = os.environ.get("SEED_ADMIN_EMAIL")
+PASSWORD = os.environ.get("SEED_ADMIN_PASSWORD")
 TARGET_APP_NAME = "Дикая Сибирь"
+
+if not EMAIL or not PASSWORD:
+    print("SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are required (no default — "
+          "credentials must never live in source). Set both and re-run.", file=sys.stderr)
+    sys.exit(1)
 
 
 def req(method, path, body=None, token=None):
