@@ -17,6 +17,7 @@ celery_app = Celery(
         "app.worker.tasks.integration",
         "app.worker.tasks.documents",
         "app.worker.tasks.rules_schedule",
+        "app.worker.tasks.partitions",
     ],
 )
 
@@ -68,6 +69,14 @@ celery_app.conf.update(
             "task": "app.worker.tasks.rules_schedule.evaluate_scheduled_rules",
             "schedule": crontab(minute=0),  # once an hour, on the hour (ТЗ 3.5.1 schedule rules)
             "options": {"queue": "sandbox"},
+        },
+        "ensure-rule-execution-log-partitions": {
+            "task": "app.worker.tasks.partitions.ensure_rule_execution_log_partitions",
+            # Monthly is enough for a 6-month-ahead buffer, but this also
+            # runs once on every deploy via the migration backfill — this
+            # schedule is what keeps the gap from reopening long-term.
+            "schedule": crontab(day_of_month=1, hour=0, minute=30),
+            "options": {"queue": "default"},
         },
     },
 )
