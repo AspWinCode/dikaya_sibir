@@ -7,8 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System dependencies for asyncpg and cryptography
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# System dependencies for asyncpg and cryptography. `upgrade` pulls in
+# any Debian security patches for packages already baked into the base
+# image (not just the ones we're newly installing) — e.g. libpcre2's
+# CVE-2026-103111 fix ships as a package upgrade, not a new install.
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     libpq-dev gcc curl \
     && rm -rf /var/lib/apt/lists/*
 
