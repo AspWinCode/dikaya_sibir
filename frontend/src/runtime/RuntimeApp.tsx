@@ -3494,7 +3494,22 @@ function DataView({ viewType, entity, cols, records, accent, colors, columnWidth
                         ) : f.is_system && f.name === "author_id" ? (
                           <AuthorCell userId={String(fieldValue(rec, f) ?? "")} />
                         ) : (
-                          formatCell(fieldValue(rec, f), f)
+                          <>
+                            {formatCell(fieldValue(rec, f), f)}
+                            {(() => {
+                              const rangeInfo = rangeCheckInfo(f, rec, entity!.id, cols, relations ?? []);
+                              return rangeInfo && (
+                                <RangeStatusCell
+                                  appId={appId}
+                                  relatedEntityId={rangeInfo.relatedEntityId}
+                                  relatedRecordId={rangeInfo.relatedRecordId}
+                                  value={Number(fieldValue(rec, f))}
+                                  minField={rangeInfo.minField}
+                                  maxField={rangeInfo.maxField}
+                                />
+                              );
+                            })()}
+                          </>
                         )}
                       </td>
                     ))}
@@ -4202,7 +4217,7 @@ function resolveRelationTargetEntityId(
 /** Resolves a `range_check` field_options config (see RangeStatusCell) for
  * one field/record into the props that component needs, or null if the
  * field has no such config or the named relation field can't be resolved. */
-function rangeCheckInfo(
+export function rangeCheckInfo(
   field: FieldRead,
   rec: RecordRead,
   entityId: string | null | undefined,
