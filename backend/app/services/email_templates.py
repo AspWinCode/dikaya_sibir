@@ -1,10 +1,11 @@
 """Email template CRUD + Jinja2 rendering."""
+
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from jinja2 import Environment, StrictUndefined, TemplateSyntaxError, UndefinedError
+from jinja2 import Environment, TemplateSyntaxError, UndefinedError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,8 +19,15 @@ from app.schemas.email_templates import (
 
 logger = structlog.get_logger(__name__)
 
-_jinja_env = Environment(undefined=StrictUndefined, autoescape=False)
-_jinja_env_safe = Environment(autoescape=False)
+# Separate environments per output shape: body_html is real HTML rendered
+# both in outgoing emails and in the admin's own browser via the preview
+# endpoint, so a context value like a record's "ФИО" field containing
+# `<script>` must be escaped — autoescape=True is the standard Jinja2 XSS
+# guard. subject/body_text are plain strings, not HTML, so escaping them
+# would corrupt legitimate characters (&, <, >) instead of protecting anyone.
+_jinja_env_html = Environment(autoescape=True)
+# Plain text/subject, not HTML — see the comment above for why.
+_jinja_env_text = Environment(autoescape=False)  # noqa: S701  # nosec B701
 
 
 class EmailTemplateNotFoundError(Exception):
@@ -39,9 +47,7 @@ class EmailTemplateService:
         self._db = db
 
     async def list_templates(self) -> list[EmailTemplateRead]:
-        result = await self._db.execute(
-            select(EmailTemplate).order_by(EmailTemplate.name)
-        )
+        result = await self._db.execute(select(EmailTemplate).order_by(EmailTemplate.name))
         return [EmailTemplateRead.model_validate(t) for t in result.scalars().all()]
 
     async def get_template(self, template_id: uuid.UUID) -> EmailTemplateRead:
@@ -49,9 +55,7 @@ class EmailTemplateService:
         return EmailTemplateRead.model_validate(t)
 
     async def get_by_code(self, code: str) -> EmailTemplate | None:
-        result = await self._db.execute(
-            select(EmailTemplate).where(EmailTemplate.code == code)
-        )
+        result = await self._db.execute(select(EmailTemplate).where(EmailTemplate.code == code))
         return result.scalar_one_or_none()
 
     async def create_template(self, data: EmailTemplateCreate) -> EmailTemplateRead:
@@ -75,7 +79,9 @@ class EmailTemplateService:
         await self._db.refresh(t)
         return EmailTemplateRead.model_validate(t)
 
-    async def update_template(self, template_id: uuid.UUID, data: EmailTemplateUpdate) -> EmailTemplateRead:
+    async def update_template(
+        self, template_id: uuid.UUID, data: EmailTemplateUpdate
+    ) -> EmailTemplateRead:
         t = await self._fetch(template_id)
         if data.name is not None:
             t.name = data.name
@@ -117,16 +123,16 @@ class EmailTemplateService:
 
     def _render(self, t: EmailTemplate, context: dict[str, Any]) -> EmailTemplatePreviewResponse:
         try:
-            subject = _jinja_env_safe.from_string(t.subject).render(**context)
-            body_html = _jinja_env_safe.from_string(t.body_html).render(**context)
+            subject = _jinja_env_text.from_string(t.subject).render(**context)
+            body_html = _jinja_env_html.from_string(t.body_html).render(**context)
             body_text = (
-                _jinja_env_safe.from_string(t.body_text).render(**context)
-                if t.body_text
-                else None
+                _jinja_env_text.from_string(t.body_text).render(**context) if t.body_text else None
             )
         except (TemplateSyntaxError, UndefinedError) as exc:
             raise EmailTemplateRenderError(str(exc)) from exc
-        return EmailTemplatePreviewResponse(subject=subject, body_html=body_html, body_text=body_text)
+        return EmailTemplatePreviewResponse(
+            subject=subject, body_html=body_html, body_text=body_text
+        )
 
     async def _fetch(self, template_id: uuid.UUID) -> EmailTemplate:
         result = await self._db.execute(
