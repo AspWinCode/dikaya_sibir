@@ -18,6 +18,7 @@ from app.schemas.ui import (
     ViewUpdate,
 )
 from app.services.apps import AppNotFoundError, AppService
+from app.services.block_validation import BlockConfigError
 from app.services.ui import (
     PageNotFoundError,
     PageSlugConflictError,
@@ -49,6 +50,7 @@ async def _check_app(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> Non
 # Views
 # ==================================================================
 
+
 @views_router.get("", response_model=list[ViewRead])
 async def list_views(
     app_id: uuid.UUID,
@@ -70,9 +72,7 @@ async def create_view(
     db: DbDep,
 ) -> ViewRead:
     await _check_app(app_id, current_user, db)
-    return await UIService(db).create_view(
-        app_id, entity_id, body, creator_id=current_user.user_id
-    )
+    return await UIService(db).create_view(app_id, entity_id, body, creator_id=current_user.user_id)
 
 
 @views_router.get("/{view_id}", response_model=ViewRead)
@@ -141,6 +141,7 @@ async def set_default_view(
 # View field configs
 # ------------------------------------------------------------------
 
+
 @views_router.get("/{view_id}/fields", response_model=list[ViewFieldConfigRead])
 async def list_field_configs(
     app_id: uuid.UUID,
@@ -177,6 +178,7 @@ async def replace_field_configs(
 # ==================================================================
 # Pages
 # ==================================================================
+
 
 @pages_router.put("/nav-order", response_model=list[PageRead])
 async def reorder_pages(
@@ -215,6 +217,11 @@ async def create_page(
             status_code=status.HTTP_409_CONFLICT,
             detail={"message": "Page slug already exists", "slug": body.slug},
         ) from exc
+    except BlockConfigError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": exc.message, "field": exc.field, "reason": exc.reason},
+        ) from exc
 
 
 @pages_router.get("/{page_id}", response_model=PageRead)
@@ -244,6 +251,11 @@ async def update_page(
         return await UIService(db).update_page(app_id, page_id, body)
     except PageNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page not found") from exc
+    except BlockConfigError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": exc.message, "field": exc.field, "reason": exc.reason},
+        ) from exc
 
 
 @pages_router.delete("/{page_id}", status_code=status.HTTP_204_NO_CONTENT)

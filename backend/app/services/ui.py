@@ -1,11 +1,15 @@
 """UIService: view CRUD, field config bulk-replace, page CRUD + publish."""
+
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.models.metamodel import Entity
 from app.models.ui import Page, PageRolePermission, View, ViewFieldConfig
 from app.schemas.ui import (
     PageCreate,
@@ -20,6 +24,7 @@ from app.schemas.ui import (
     ViewRead,
     ViewUpdate,
 )
+from app.services.block_validation import validate_blocks
 
 logger = structlog.get_logger(__name__)
 
@@ -50,8 +55,10 @@ class UIService:
         entity_id: uuid.UUID | None = None,
         view_type: str | None = None,
     ) -> list[ViewRead]:
-        stmt = select(View).where(View.app_id == app_id).order_by(
-            View.entity_id, View.is_default.desc(), View.created_at
+        stmt = (
+            select(View)
+            .where(View.app_id == app_id)
+            .order_by(View.entity_id, View.is_default.desc(), View.created_at)
         )
         if entity_id:
             stmt = stmt.where(View.entity_id == entity_id)
@@ -136,9 +143,7 @@ class UIService:
         # Verify view ownership
         await self._fetch_view(app_id, view_id)
 
-        await self._db.execute(
-            delete(ViewFieldConfig).where(ViewFieldConfig.view_id == view_id)
-        )
+        await self._db.execute(delete(ViewFieldConfig).where(ViewFieldConfig.view_id == view_id))
 
         new_configs: list[ViewFieldConfig] = []
         for item in data.fields:
@@ -164,15 +169,22 @@ class UIService:
 
     async def list_pages(self, app_id: uuid.UUID) -> list[PageRead]:
         result = await self._db.execute(
-            select(Page)
-            .where(Page.app_id == app_id)
-            .order_by(Page.nav_order, Page.created_at)
+            select(Page).where(Page.app_id == app_id).order_by(Page.nav_order, Page.created_at)
         )
         return [PageRead.model_validate(p) for p in result.scalars()]
 
     async def get_page(self, app_id: uuid.UUID, page_id: uuid.UUID) -> PageRead:
         page = await self._fetch_page(app_id, page_id)
         return PageRead.model_validate(page)
+
+    async def _validate_blocks(self, app_id: uuid.UUID, blocks: list[dict[str, Any]]) -> None:
+        if not any(b.get("type") == "pivot" for b in blocks):
+            return
+        result = await self._db.execute(
+            select(Entity).where(Entity.app_id == app_id).options(selectinload(Entity.fields))
+        )
+        entities_by_id = {str(e.id): e for e in result.scalars()}
+        validate_blocks(blocks, entities_by_id)
 
     async def create_page(self, app_id: uuid.UUID, data: PageCreate) -> PageRead:
         # Slug uniqueness
@@ -181,6 +193,8 @@ class UIService:
         )
         if existing.scalar_one_or_none():
             raise PageSlugConflictError(f"Slug '{data.slug}' already exists in this app")
+
+        await self._validate_blocks(app_id, data.blocks)
 
         page = Page(
             app_id=app_id,
@@ -200,6 +214,8 @@ class UIService:
         self, app_id: uuid.UUID, page_id: uuid.UUID, data: PageUpdate
     ) -> PageRead:
         page = await self._fetch_page(app_id, page_id)
+        if data.blocks is not None:
+            await self._validate_blocks(app_id, data.blocks)
         if data.title is not None:
             page.title = data.title
         if data.icon is not None:

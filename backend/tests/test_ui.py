@@ -5,13 +5,10 @@ Unit: schema validators (slug pattern, field name uniqueness, widget types).
 Integration: full CRUD for views + pages, set_default, field config bulk-replace,
              publish/unpublish, slug conflict.
 """
+
 import uuid
 
 import pytest
-from httpx import AsyncClient
-from pydantic import ValidationError
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
 from app.schemas.ui import (
@@ -22,11 +19,14 @@ from app.schemas.ui import (
     ViewFieldConfigItem,
     ViewType,
 )
-
+from httpx import AsyncClient
+from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ==================================================================
 # Unit: schema validation
 # ==================================================================
+
 
 class TestPageCreateSchema:
     def test_valid_slug(self) -> None:
@@ -63,21 +63,25 @@ class TestPageCreateSchema:
 class TestViewFieldConfigBulkUpdateSchema:
     def test_duplicate_field_names_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            ViewFieldConfigBulkUpdate(fields=[
-                ViewFieldConfigItem(field_name="email"),
-                ViewFieldConfigItem(field_name="email"),
-            ])
+            ViewFieldConfigBulkUpdate(
+                fields=[
+                    ViewFieldConfigItem(field_name="email"),
+                    ViewFieldConfigItem(field_name="email"),
+                ]
+            )
 
     def test_unique_field_names_accepted(self) -> None:
-        body = ViewFieldConfigBulkUpdate(fields=[
-            ViewFieldConfigItem(field_name="email"),
-            ViewFieldConfigItem(field_name="name"),
-        ])
+        body = ViewFieldConfigBulkUpdate(
+            fields=[
+                ViewFieldConfigItem(field_name="email"),
+                ViewFieldConfigItem(field_name="name"),
+            ]
+        )
         assert len(body.fields) == 2
 
     def test_width_bounds(self) -> None:
         with pytest.raises(ValidationError):
-            ViewFieldConfigItem(field_name="x", width=10)   # below min 20
+            ViewFieldConfigItem(field_name="x", width=10)  # below min 20
 
         with pytest.raises(ValidationError):
             ViewFieldConfigItem(field_name="x", width=3000)  # above max 2000
@@ -102,6 +106,7 @@ class TestViewCreateSchema:
 # Fixtures
 # ==================================================================
 
+
 @pytest.fixture()
 async def builder(db_session: AsyncSession) -> User:
     for role_id in ("app_builder",):
@@ -125,9 +130,7 @@ async def _login(client: AsyncClient, email: str, pwd: str) -> str:
     return r.json()["access_token"]
 
 
-async def _setup_app_entity(
-    client: AsyncClient, token: str
-) -> tuple[str, str]:
+async def _setup_app_entity(client: AsyncClient, token: str) -> tuple[str, str]:
     slug = f"ui-app-{uuid.uuid4().hex[:6]}"
     app_resp = await client.post(
         "/api/v1/apps",
@@ -149,6 +152,7 @@ async def _setup_app_entity(
 # ==================================================================
 # Integration: Views
 # ==================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -199,9 +203,9 @@ async def test_update_view(client: AsyncClient, builder: User) -> None:
     headers = {"Authorization": f"Bearer {token}"}
     base = f"/api/v1/apps/{app_id}/entities/{entity_id}/views"
 
-    view = (await client.post(
-        base, json={"name": "Old Name", "view_type": "table"}, headers=headers
-    )).json()
+    view = (
+        await client.post(base, json={"name": "Old Name", "view_type": "table"}, headers=headers)
+    ).json()
 
     resp = await client.patch(
         f"{base}/{view['id']}",
@@ -221,9 +225,9 @@ async def test_delete_view(client: AsyncClient, builder: User) -> None:
     headers = {"Authorization": f"Bearer {token}"}
     base = f"/api/v1/apps/{app_id}/entities/{entity_id}/views"
 
-    view = (await client.post(
-        base, json={"name": "Temp", "view_type": "gallery"}, headers=headers
-    )).json()
+    view = (
+        await client.post(base, json={"name": "Temp", "view_type": "gallery"}, headers=headers)
+    ).json()
 
     assert (await client.delete(f"{base}/{view['id']}", headers=headers)).status_code == 204
     assert (await client.get(f"{base}/{view['id']}", headers=headers)).status_code == 404
@@ -237,8 +241,12 @@ async def test_set_default_view(client: AsyncClient, builder: User) -> None:
     headers = {"Authorization": f"Bearer {token}"}
     base = f"/api/v1/apps/{app_id}/entities/{entity_id}/views"
 
-    v1 = (await client.post(base, json={"name": "V1", "view_type": "table"}, headers=headers)).json()
-    v2 = (await client.post(base, json={"name": "V2", "view_type": "table"}, headers=headers)).json()
+    v1 = (
+        await client.post(base, json={"name": "V1", "view_type": "table"}, headers=headers)
+    ).json()
+    v2 = (
+        await client.post(base, json={"name": "V2", "view_type": "table"}, headers=headers)
+    ).json()
 
     # Set v1 as default
     r1 = await client.post(f"{base}/{v1['id']}/set_default", headers=headers)
@@ -273,6 +281,7 @@ async def test_view_not_found(client: AsyncClient, builder: User) -> None:
 # Integration: ViewFieldConfig bulk-replace
 # ==================================================================
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_replace_field_configs(client: AsyncClient, builder: User) -> None:
@@ -281,15 +290,15 @@ async def test_replace_field_configs(client: AsyncClient, builder: User) -> None
     headers = {"Authorization": f"Bearer {token}"}
     base = f"/api/v1/apps/{app_id}/entities/{entity_id}/views"
 
-    view = (await client.post(
-        base, json={"name": "Table", "view_type": "table"}, headers=headers
-    )).json()
+    view = (
+        await client.post(base, json={"name": "Table", "view_type": "table"}, headers=headers)
+    ).json()
     view_id = view["id"]
 
     # First replacement
     fields = [
-        {"field_name": "name",  "is_visible": True,  "display_order": 0, "width": 200},
-        {"field_name": "email", "is_visible": True,  "display_order": 1},
+        {"field_name": "name", "is_visible": True, "display_order": 0, "width": 200},
+        {"field_name": "email", "is_visible": True, "display_order": 1},
         {"field_name": "phone", "is_visible": False, "display_order": 2},
     ]
     r1 = await client.put(f"{base}/{view_id}/fields", json={"fields": fields}, headers=headers)
@@ -316,9 +325,9 @@ async def test_field_configs_empty_replace(client: AsyncClient, builder: User) -
     headers = {"Authorization": f"Bearer {token}"}
     base = f"/api/v1/apps/{app_id}/entities/{entity_id}/views"
 
-    view = (await client.post(
-        base, json={"name": "V", "view_type": "table"}, headers=headers
-    )).json()
+    view = (
+        await client.post(base, json={"name": "V", "view_type": "table"}, headers=headers)
+    ).json()
     view_id = view["id"]
 
     await client.put(
@@ -342,17 +351,22 @@ async def test_field_config_widget_type(client: AsyncClient, builder: User) -> N
     headers = {"Authorization": f"Bearer {token}"}
     base = f"/api/v1/apps/{app_id}/entities/{entity_id}/views"
 
-    view = (await client.post(
-        base, json={"name": "Form View", "view_type": "form"}, headers=headers
-    )).json()
+    view = (
+        await client.post(base, json={"name": "Form View", "view_type": "form"}, headers=headers)
+    ).json()
     view_id = view["id"]
 
     r = await client.put(
         f"{base}/{view_id}/fields",
-        json={"fields": [
-            {"field_name": "bio", "widget_type": "rich_text",
-             "widget_config": {"toolbar": "full"}},
-        ]},
+        json={
+            "fields": [
+                {
+                    "field_name": "bio",
+                    "widget_type": "rich_text",
+                    "widget_config": {"toolbar": "full"},
+                },
+            ]
+        },
         headers=headers,
     )
     assert r.status_code == 200
@@ -363,6 +377,7 @@ async def test_field_config_widget_type(client: AsyncClient, builder: User) -> N
 # ==================================================================
 # Integration: Pages
 # ==================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -407,9 +422,13 @@ async def test_list_pages_ordered_by_nav_order(client: AsyncClient, builder: Use
     headers = {"Authorization": f"Bearer {token}"}
     base = f"/api/v1/apps/{app_id}/pages"
 
-    await client.post(base, json={"slug": "settings", "title": "Settings", "nav_order": 2}, headers=headers)
-    await client.post(base, json={"slug": "home",     "title": "Home",     "nav_order": 0}, headers=headers)
-    await client.post(base, json={"slug": "reports",  "title": "Reports",  "nav_order": 1}, headers=headers)
+    await client.post(
+        base, json={"slug": "settings", "title": "Settings", "nav_order": 2}, headers=headers
+    )
+    await client.post(base, json={"slug": "home", "title": "Home", "nav_order": 0}, headers=headers)
+    await client.post(
+        base, json={"slug": "reports", "title": "Reports", "nav_order": 1}, headers=headers
+    )
 
     resp = await client.get(base, headers=headers)
     assert resp.status_code == 200
@@ -425,9 +444,9 @@ async def test_update_page(client: AsyncClient, builder: User) -> None:
     headers = {"Authorization": f"Bearer {token}"}
     base = f"/api/v1/apps/{app_id}/pages"
 
-    page = (await client.post(
-        base, json={"slug": "tasks", "title": "Tasks"}, headers=headers
-    )).json()
+    page = (
+        await client.post(base, json={"slug": "tasks", "title": "Tasks"}, headers=headers)
+    ).json()
 
     resp = await client.patch(
         f"{base}/{page['id']}",
@@ -449,24 +468,24 @@ async def test_update_page_blocks(client: AsyncClient, builder: User) -> None:
     base = f"/api/v1/apps/{app_id}/pages"
 
     # Create a view to reference in block
-    view = (await client.post(
-        f"/api/v1/apps/{app_id}/entities/{entity_id}/views",
-        json={"name": "Orders Table", "view_type": "table"},
-        headers=headers,
-    )).json()
+    view = (
+        await client.post(
+            f"/api/v1/apps/{app_id}/entities/{entity_id}/views",
+            json={"name": "Orders Table", "view_type": "table"},
+            headers=headers,
+        )
+    ).json()
 
-    page = (await client.post(
-        base, json={"slug": "orders-page", "title": "Orders"}, headers=headers
-    )).json()
+    page = (
+        await client.post(base, json={"slug": "orders-page", "title": "Orders"}, headers=headers)
+    ).json()
 
     blocks = [
         {"id": "b1", "type": "rich_text", "content": "<h1>Orders</h1>"},
         {"id": "b2", "type": "view", "view_id": view["id"], "title": "All Orders"},
         {"id": "b3", "type": "divider"},
     ]
-    resp = await client.patch(
-        f"{base}/{page['id']}", json={"blocks": blocks}, headers=headers
-    )
+    resp = await client.patch(f"{base}/{page['id']}", json={"blocks": blocks}, headers=headers)
     assert resp.status_code == 200
     assert len(resp.json()["blocks"]) == 3
 
@@ -479,9 +498,9 @@ async def test_publish_unpublish_page(client: AsyncClient, builder: User) -> Non
     headers = {"Authorization": f"Bearer {token}"}
     base = f"/api/v1/apps/{app_id}/pages"
 
-    page = (await client.post(
-        base, json={"slug": "pub-test", "title": "Pub Test"}, headers=headers
-    )).json()
+    page = (
+        await client.post(base, json={"slug": "pub-test", "title": "Pub Test"}, headers=headers)
+    ).json()
     page_id = page["id"]
 
     pub = await client.post(f"{base}/{page_id}/publish", headers=headers)
@@ -502,9 +521,9 @@ async def test_delete_page(client: AsyncClient, builder: User) -> None:
     headers = {"Authorization": f"Bearer {token}"}
     base = f"/api/v1/apps/{app_id}/pages"
 
-    page = (await client.post(
-        base, json={"slug": "delete-me", "title": "Delete Me"}, headers=headers
-    )).json()
+    page = (
+        await client.post(base, json={"slug": "delete-me", "title": "Delete Me"}, headers=headers)
+    ).json()
 
     assert (await client.delete(f"{base}/{page['id']}", headers=headers)).status_code == 204
     assert (await client.get(f"{base}/{page['id']}", headers=headers)).status_code == 404
@@ -517,9 +536,7 @@ async def test_page_not_found(client: AsyncClient, builder: User) -> None:
     app_id, _ = await _setup_app_entity(client, token)
     headers = {"Authorization": f"Bearer {token}"}
 
-    resp = await client.get(
-        f"/api/v1/apps/{app_id}/pages/{uuid.uuid4()}", headers=headers
-    )
+    resp = await client.get(f"/api/v1/apps/{app_id}/pages/{uuid.uuid4()}", headers=headers)
     assert resp.status_code == 404
 
 
@@ -541,3 +558,214 @@ async def test_same_slug_different_apps_allowed(client: AsyncClient, builder: Us
     )
     assert r1.status_code == 201
     assert r2.status_code == 201
+
+
+# ==================================================================
+# Integration: pivot block config validation (ТЗ item 4) — the frontend
+# already blocks obviously-invalid combinations in its own UI, but a
+# client posting directly to the API must hit the same wall.
+# ==================================================================
+
+
+async def _setup_pivot_entity(client: AsyncClient, token: str) -> tuple[str, str]:
+    """An entity with one of each field type the pivot checks care about."""
+    headers = {"Authorization": f"Bearer {token}"}
+    app_id, entity_id = await _setup_app_entity(client, token)
+    for f in [
+        {"name": "qty", "display_name": "Количество", "field_type": "number"},
+        {"name": "price", "display_name": "Цена", "field_type": "currency"},
+        {"name": "note", "display_name": "Примечание", "field_type": "text"},
+        {"name": "placed_at", "display_name": "Дата", "field_type": "date"},
+    ]:
+        r = await client.post(
+            f"/api/v1/apps/{app_id}/entities/{entity_id}/fields", json=f, headers=headers
+        )
+        assert r.status_code == 201, r.text
+    return app_id, entity_id
+
+
+def _pivot_page_body(entity_id: str, **config_overrides: object) -> dict:
+    config = {"entity_id": entity_id, "agg": "count"}
+    config.update(config_overrides)
+    return {
+        "slug": f"pivot-{uuid.uuid4().hex[:6]}",
+        "title": "Report",
+        "blocks": [{"id": "b1", "type": "pivot", "config": config}],
+    }
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pivot_sum_over_number_field_accepted(client: AsyncClient, builder: User) -> None:
+    token = await _login(client, builder.email, "Build1234!")
+    app_id, entity_id = await _setup_pivot_entity(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    body = _pivot_page_body(entity_id, agg="sum", value_field="qty")
+    resp = await client.post(f"/api/v1/apps/{app_id}/pages", json=body, headers=headers)
+    assert resp.status_code == 201, resp.text
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pivot_avg_over_currency_field_accepted(client: AsyncClient, builder: User) -> None:
+    token = await _login(client, builder.email, "Build1234!")
+    app_id, entity_id = await _setup_pivot_entity(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    body = _pivot_page_body(entity_id, agg="avg", value_field="price")
+    resp = await client.post(f"/api/v1/apps/{app_id}/pages", json=body, headers=headers)
+    assert resp.status_code == 201, resp.text
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pivot_count_over_text_field_accepted(client: AsyncClient, builder: User) -> None:
+    """count doesn't care about the value field's type — it's just a row count."""
+    token = await _login(client, builder.email, "Build1234!")
+    app_id, entity_id = await _setup_pivot_entity(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    body = _pivot_page_body(entity_id, agg="count")
+    resp = await client.post(f"/api/v1/apps/{app_id}/pages", json=body, headers=headers)
+    assert resp.status_code == 201, resp.text
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pivot_sum_over_text_field_rejected(client: AsyncClient, builder: User) -> None:
+    token = await _login(client, builder.email, "Build1234!")
+    app_id, entity_id = await _setup_pivot_entity(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    body = _pivot_page_body(entity_id, agg="sum", value_field="note")
+    resp = await client.post(f"/api/v1/apps/{app_id}/pages", json=body, headers=headers)
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert detail["field"] == "value_field"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pivot_unknown_entity_rejected(client: AsyncClient, builder: User) -> None:
+    token = await _login(client, builder.email, "Build1234!")
+    app_id, _ = await _setup_pivot_entity(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    body = _pivot_page_body(str(uuid.uuid4()))
+    resp = await client.post(f"/api/v1/apps/{app_id}/pages", json=body, headers=headers)
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["field"] == "entity_id"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pivot_unknown_field_rejected(client: AsyncClient, builder: User) -> None:
+    token = await _login(client, builder.email, "Build1234!")
+    app_id, entity_id = await _setup_pivot_entity(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    body = _pivot_page_body(entity_id, row_field="does_not_exist")
+    resp = await client.post(f"/api/v1/apps/{app_id}/pages", json=body, headers=headers)
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["field"] == "row_field"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pivot_unknown_agg_rejected(client: AsyncClient, builder: User) -> None:
+    token = await _login(client, builder.email, "Build1234!")
+    app_id, entity_id = await _setup_pivot_entity(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    body = _pivot_page_body(entity_id, agg="median")
+    resp = await client.post(f"/api/v1/apps/{app_id}/pages", json=body, headers=headers)
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["field"] == "agg"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pivot_invalid_filter_field_rejected(client: AsyncClient, builder: User) -> None:
+    token = await _login(client, builder.email, "Build1234!")
+    app_id, entity_id = await _setup_pivot_entity(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    body = _pivot_page_body(entity_id, filter_field="nope", filter_op="eq")
+    resp = await client.post(f"/api/v1/apps/{app_id}/pages", json=body, headers=headers)
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["field"] == "filter_field"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pivot_invalid_filter_operator_rejected(client: AsyncClient, builder: User) -> None:
+    token = await _login(client, builder.email, "Build1234!")
+    app_id, entity_id = await _setup_pivot_entity(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    body = _pivot_page_body(entity_id, filter_field="note", filter_op="regex")
+    resp = await client.post(f"/api/v1/apps/{app_id}/pages", json=body, headers=headers)
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["field"] == "filter_op"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pivot_numeric_filter_op_on_text_field_rejected(
+    client: AsyncClient, builder: User
+) -> None:
+    token = await _login(client, builder.email, "Build1234!")
+    app_id, entity_id = await _setup_pivot_entity(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    body = _pivot_page_body(entity_id, filter_field="note", filter_op="gt", filter_value="5")
+    resp = await client.post(f"/api/v1/apps/{app_id}/pages", json=body, headers=headers)
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["field"] == "filter_op"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pivot_valid_config_survives_update(client: AsyncClient, builder: User) -> None:
+    """A valid page still saves correctly through PATCH after this change."""
+    token = await _login(client, builder.email, "Build1234!")
+    app_id, entity_id = await _setup_pivot_entity(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    body = _pivot_page_body(entity_id, agg="count")
+    create_resp = await client.post(f"/api/v1/apps/{app_id}/pages", json=body, headers=headers)
+    assert create_resp.status_code == 201
+    page_id = create_resp.json()["id"]
+
+    new_blocks = [
+        {
+            "id": "b1",
+            "type": "pivot",
+            "config": {"entity_id": entity_id, "agg": "sum", "value_field": "qty"},
+        }
+    ]
+    patch_resp = await client.patch(
+        f"/api/v1/apps/{app_id}/pages/{page_id}",
+        json={"blocks": new_blocks},
+        headers=headers,
+    )
+    assert patch_resp.status_code == 200, patch_resp.text
+    assert patch_resp.json()["blocks"] == new_blocks
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_non_pivot_blocks_are_not_validated(client: AsyncClient, builder: User) -> None:
+    """Only the pivot block type is checked — other block types pass through."""
+    token = await _login(client, builder.email, "Build1234!")
+    app_id, _ = await _setup_app_entity(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    body = {
+        "slug": "plain",
+        "title": "Plain",
+        "blocks": [{"id": "b1", "type": "divider", "config": {}}],
+    }
+    resp = await client.post(f"/api/v1/apps/{app_id}/pages", json=body, headers=headers)
+    assert resp.status_code == 201, resp.text
