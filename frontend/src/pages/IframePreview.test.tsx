@@ -61,4 +61,11 @@ describe("ViewEditorPage's IframePreview — device switcher (the constructor's 
     await user.click(desktopBtn);
     expect(openSpy).not.toHaveBeenCalled();
   });
+
+  it("the runtime iframe's own mask has square (90°) corners, not a rounded/skewed device frame", () => {
+    renderPreview("app-1");
+    const iframe = screen.getByTitle("Предпросмотр приложения");
+    const mask = iframe.parentElement!;
+    expect(mask.style.borderRadius).toBe("0");
+  });
 });

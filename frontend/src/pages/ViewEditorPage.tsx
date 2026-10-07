@@ -2473,9 +2473,11 @@ export function IframePreview({
   ];
 
   // Mobile: 380×800 phone frame. Tablet: 460×620, 768px content scaled down.
+  // borderR is 0 — the app's own header must keep square (90°) corners,
+  // not be clipped into a rounded/skewed shape by the device mockup frame.
   const DEVICE_CFG = {
-    mobile:  { frameW: 380, frameH: 800, iframeW: 390,  borderR: 40 },
-    tablet:  { frameW: 460, frameH: 620, iframeW: 768,  borderR: 24 },
+    mobile:  { frameW: 380, frameH: 800, iframeW: 390,  borderR: 0 },
+    tablet:  { frameW: 460, frameH: 620, iframeW: 768,  borderR: 0 },
   } as const;
   const cfg = DEVICE_CFG[device];
   const scale = cfg.frameW / cfg.iframeW;

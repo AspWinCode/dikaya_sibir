@@ -50,4 +50,11 @@ describe("PreviewPanel — device switcher", () => {
     await user.click(desktopBtn);
     expect(openSpy).not.toHaveBeenCalled();
   });
+
+  it("the runtime iframe's own mask has square (90°) corners, not a rounded/skewed frame", () => {
+    render(<PreviewPanel appId="app-1" />);
+    const iframe = screen.getByTitle("Fitness App");
+    const mask = iframe.parentElement!;
+    expect(mask.style.borderRadius).toBe("0");
+  });
 });

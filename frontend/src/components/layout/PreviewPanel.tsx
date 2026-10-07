@@ -57,7 +57,9 @@ export function PreviewPanel({ projectName = "Fitness App", appId, onOpen }: Pre
   ];
 
   const FRAME_W: Record<typeof device, number> = { mobile: 380, tablet: 480 };
-  const OUTER_R: Record<typeof device, number> = { mobile: 60, tablet: 32 };
+  // 0 — the app's own header must keep square (90°) corners, not be
+  // clipped into a rounded/skewed shape by the device mockup frame.
+  const OUTER_R: Record<typeof device, number> = { mobile: 0, tablet: 0 };
   const frameW = FRAME_W[device];
   const outerR = OUTER_R[device];
 
