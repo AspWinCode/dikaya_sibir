@@ -11,7 +11,6 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
-        env_list_delimiter=",",   # parse LIST fields as comma-separated, not JSON
     )
 
     # App
@@ -19,7 +18,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "No-Code Platform API"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
-    SECRET_KEY: str = "change-me-in-production"
+    SECRET_KEY: str = "change-me-in-production"  # noqa: S105 — dev default, must be overridden in prod
     # Base64-encoded 32-byte key for AES-256-GCM field-level encryption (ТЗ 3.13).
     # Dev default is fixed and public — production MUST override this or
     # every "sensitive" field's encryption is worthless (see app/core/field_crypto.py).
@@ -35,8 +34,8 @@ class Settings(BaseSettings):
     REDIS_URL: RedisDsn = "redis://localhost:6379/0"  # type: ignore[assignment]
 
     # JWT — RS256
-    JWT_PRIVATE_KEY: str = ""   # PEM, populated from env/secret
-    JWT_PUBLIC_KEY: str = ""    # PEM, populated from env/secret
+    JWT_PRIVATE_KEY: str = ""  # PEM, populated from env/secret
+    JWT_PUBLIC_KEY: str = ""  # PEM, populated from env/secret
     JWT_ALGORITHM: str = "RS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
@@ -52,7 +51,7 @@ class Settings(BaseSettings):
     # S3 / MinIO
     S3_ENDPOINT_URL: str = "http://localhost:9000"
     S3_ACCESS_KEY: str = "minioadmin"
-    S3_SECRET_KEY: str = "minioadmin"
+    S3_SECRET_KEY: str = "minioadmin"  # noqa: S105 — MinIO's own documented local-dev default
     S3_BUCKET_FILES: str = "nocode-files"
     S3_BUCKET_EXPORTS: str = "nocode-exports"
     S3_REGION: str = "us-east-1"
@@ -66,8 +65,10 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = "noreply@nocode.local"
 
     # Seed (development bootstrap admin)
-    SEED_ADMIN_EMAIL: str = "admin@lesovik.app"   # must be valid RFC-5321 email (.local rejected by email-validator)
-    SEED_ADMIN_PASSWORD: str = "ChangeMe123!"
+    SEED_ADMIN_EMAIL: str = (
+        "admin@lesovik.app"  # must be valid RFC-5321 email (.local rejected by email-validator)
+    )
+    SEED_ADMIN_PASSWORD: str = "ChangeMe123!"  # noqa: S105 — placeholder seed default, not a real credential
     SEED_ADMIN_NAME: str = "Platform Admin"
 
     # CORS — comma-separated string; parse with cors_origins_list property
@@ -129,7 +130,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()  # type: ignore[call-arg]
+    return Settings()
 
 
 settings = get_settings()

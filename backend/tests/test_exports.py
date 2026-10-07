@@ -1,16 +1,15 @@
 """Tests for GET /export — XLSX, CSV, PDF export endpoint."""
+
 from __future__ import annotations
 
 import uuid
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
 from app.services.exports import ExportService
-
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ------------------------------------------------------------------
 # Fixtures
@@ -43,7 +42,8 @@ async def _login(client: AsyncClient, email: str, pwd: str) -> str:
 async def _setup_entity(client: AsyncClient, token: str) -> tuple[str, str]:
     slug = f"export-app-{uuid.uuid4().hex[:6]}"
     app_r = await client.post(
-        "/api/v1/apps", json={"slug": slug, "name": "Export Test App"},
+        "/api/v1/apps",
+        json={"slug": slug, "name": "Export Test App"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert app_r.status_code == 201, app_r.text
@@ -57,8 +57,9 @@ async def _setup_entity(client: AsyncClient, token: str) -> tuple[str, str]:
     return app_id, entity_r.json()["id"]
 
 
-async def _create_record(client: AsyncClient, token: str, app_id: str, entity_id: str,
-                          payload: dict) -> dict:
+async def _create_record(
+    client: AsyncClient, token: str, app_id: str, entity_id: str, payload: dict
+) -> dict:
     r = await client.post(
         f"/api/v1/apps/{app_id}/entities/{entity_id}/records",
         json={"payload": payload},
@@ -68,8 +69,9 @@ async def _create_record(client: AsyncClient, token: str, app_id: str, entity_id
     return r.json()
 
 
-async def _create_field(client: AsyncClient, token: str, app_id: str, entity_id: str,
-                         name: str, field_type: str) -> None:
+async def _create_field(
+    client: AsyncClient, token: str, app_id: str, entity_id: str, name: str, field_type: str
+) -> None:
     r = await client.post(
         f"/api/v1/apps/{app_id}/entities/{entity_id}/fields",
         json={"name": name, "display_name": name, "field_type": field_type},

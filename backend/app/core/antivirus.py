@@ -1,5 +1,7 @@
 """Async ClamAV client via clamd INSTREAM protocol (TCP)."""
+
 import asyncio
+import contextlib
 import struct
 
 import structlog
@@ -60,10 +62,8 @@ class ClamAVClient:
             return is_clean, response
         finally:
             writer.close()
-            try:
+            with contextlib.suppress(Exception):
                 await writer.wait_closed()
-            except Exception:  # noqa: BLE001
-                pass
 
     async def ping(self) -> bool:
         """Returns True if ClamAV is reachable."""
@@ -77,7 +77,7 @@ class ClamAVClient:
             resp = await asyncio.wait_for(reader.read(64), timeout=5.0)
             writer.close()
             return b"PONG" in resp
-        except Exception:  # noqa: BLE001
+        except Exception:
             return False
 
 

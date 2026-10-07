@@ -16,7 +16,7 @@ from app.schemas.entities import (
     RelationRead,
     RelationUpdate,
 )
-from app.services.apps import AppNotFoundError, AppPermissionError, AppService
+from app.services.apps import AppNotFoundError, AppService
 from app.services.entities import (
     EntityConflictError,
     EntityNotFoundError,
@@ -44,6 +44,7 @@ async def _check_app_access(
 # Entities
 # ------------------------------------------------------------------
 
+
 @router.get("/entities", response_model=list[EntityRead])
 async def list_entities(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> list[EntityRead]:
     await _check_app_access(app_id, current_user, db)
@@ -69,7 +70,9 @@ async def get_entity(
     try:
         return await EntityService(db).get_entity(app_id, entity_id)
     except EntityNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
+        ) from exc
 
 
 @router.patch("/entities/{entity_id}", response_model=EntityRead)
@@ -80,7 +83,9 @@ async def update_entity(
     try:
         return await EntityService(db).update_entity(app_id, entity_id, body)
     except EntityNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
+        ) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
@@ -93,7 +98,9 @@ async def delete_entity(
     try:
         await EntityService(db).delete_entity(app_id, entity_id)
     except EntityNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
+        ) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
@@ -101,6 +108,7 @@ async def delete_entity(
 # ------------------------------------------------------------------
 # Fields
 # ------------------------------------------------------------------
+
 
 @router.post(
     "/entities/{entity_id}/fields",
@@ -115,7 +123,9 @@ async def create_field(
     try:
         return await EntityService(db).create_field(app_id, entity_id, body)
     except EntityNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
+        ) from exc
     except FieldConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
@@ -175,14 +185,19 @@ async def reorder_fields(
     try:
         return await EntityService(db).reorder_fields(app_id, entity_id, body)
     except EntityNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
+        ) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
 
 # ------------------------------------------------------------------
 # Relations
 # ------------------------------------------------------------------
+
 
 @router.get("/relations", response_model=list[RelationRead], tags=["relations"])
 async def list_relations(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> list[RelationRead]:
@@ -203,25 +218,35 @@ async def create_relation(
     try:
         return await EntityService(db).create_relation(app_id, body)
     except EntityNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
+        ) from exc
     except RelationConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.patch("/relations/{relation_id}", response_model=RelationRead, tags=["relations"])
 async def update_relation(
-    app_id: uuid.UUID, relation_id: uuid.UUID, body: RelationUpdate, current_user: AuthDep, db: DbDep
+    app_id: uuid.UUID,
+    relation_id: uuid.UUID,
+    body: RelationUpdate,
+    current_user: AuthDep,
+    db: DbDep,
 ) -> RelationRead:
     await _check_app_access(app_id, current_user, db)
     try:
         return await EntityService(db).update_relation(app_id, relation_id, body)
     except EntityNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Relation not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Relation not found"
+        ) from exc
     except FieldConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
-@router.delete("/relations/{relation_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["relations"])
+@router.delete(
+    "/relations/{relation_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["relations"]
+)
 async def delete_relation(
     app_id: uuid.UUID, relation_id: uuid.UUID, current_user: AuthDep, db: DbDep
 ) -> None:
@@ -229,4 +254,6 @@ async def delete_relation(
     try:
         await EntityService(db).delete_relation(app_id, relation_id)
     except EntityNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Relation not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Relation not found"
+        ) from exc

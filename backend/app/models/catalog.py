@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -7,14 +8,17 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
+if TYPE_CHECKING:
+    from app.models.metamodel import (
+        Entity,
+    )
+
 
 class App(Base):
     __tablename__ = "app"
     __table_args__ = {"schema": "catalog"}
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     slug: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -46,7 +50,7 @@ class App(Base):
     members: Mapped[list["AppMember"]] = relationship(
         "AppMember", back_populates="app", cascade="all, delete-orphan"
     )
-    entities: Mapped[list["app.models.metamodel.Entity"]] = relationship(  # type: ignore[name-defined]
+    entities: Mapped[list["Entity"]] = relationship(
         "Entity", back_populates="app", cascade="all, delete-orphan"
     )
     snapshots: Mapped[list["AppSnapshot"]] = relationship(
@@ -56,6 +60,7 @@ class App(Base):
 
 class AppMember(Base):
     """Per-app user roles (app_admin, app_editor, app_viewer)."""
+
     __tablename__ = "app_member"
     __table_args__ = {"schema": "catalog"}
 
@@ -81,12 +86,11 @@ class AppMember(Base):
 
 class AppInviteLink(Base):
     """Shareable invite link granting app membership (token stored as sha256)."""
+
     __tablename__ = "app_invite_link"
     __table_args__ = {"schema": "catalog"}
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     app_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("catalog.app.id", ondelete="CASCADE"),
@@ -111,9 +115,7 @@ class Module(Base):
     __tablename__ = "module"
     __table_args__ = {"schema": "catalog"}
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -138,9 +140,7 @@ class ModuleVersion(Base):
         {"schema": "catalog"},
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     module_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("catalog.module.id", ondelete="CASCADE"),
@@ -177,15 +177,14 @@ class ModuleDependency(Base):
 
 class AppSnapshot(Base):
     """Point-in-time snapshot of an app's structure for rollback."""
+
     __tablename__ = "app_snapshot"
     __table_args__ = (
         UniqueConstraint("app_id", "snapshot_num", name="uq_app_snapshot_num"),
         {"schema": "catalog"},
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     app_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("catalog.app.id", ondelete="CASCADE"),

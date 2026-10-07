@@ -5,6 +5,7 @@ GET /health        — full dependency check (DB, Redis, S3, ClamAV)
 GET /health/live   — liveness probe (returns 200 immediately, no deps)
 GET /health/ready  — readiness probe (DB + Redis must be up)
 """
+
 import time
 from typing import Any
 
@@ -25,7 +26,7 @@ async def _check_database(db: DbDep) -> dict[str, Any]:
     try:
         await db.execute(text("SELECT 1"))
         return {"status": "ok", "latency_ms": round((time.monotonic() - t0) * 1000, 1)}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("health_db_failed", error=str(exc))
         return {"status": "error", "detail": str(exc)}
 
@@ -34,11 +35,13 @@ async def _check_redis() -> dict[str, Any]:
     t0 = time.monotonic()
     try:
         import redis.asyncio as aioredis
+
         client = aioredis.from_url(str(settings.REDIS_URL), socket_connect_timeout=2)
         await client.ping()
-        await client.aclose()
+        # redis-py 5.x has aclose() at runtime; its stub lags behind.
+        await client.aclose()  # type: ignore[attr-defined]
         return {"status": "ok", "latency_ms": round((time.monotonic() - t0) * 1000, 1)}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("health_redis_failed", error=str(exc))
         return {"status": "error", "detail": str(exc)}
 
@@ -47,8 +50,8 @@ async def _check_s3() -> dict[str, Any]:
     t0 = time.monotonic()
     try:
         import asyncio
+
         import boto3
-        from botocore.exceptions import BotoCoreError, ClientError
 
         def _head() -> None:
             s3 = boto3.client(
@@ -61,7 +64,7 @@ async def _check_s3() -> dict[str, Any]:
 
         await asyncio.to_thread(_head)
         return {"status": "ok", "latency_ms": round((time.monotonic() - t0) * 1000, 1)}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("health_s3_failed", error=str(exc))
         return {"status": "degraded", "detail": str(exc)}
 
@@ -70,6 +73,7 @@ async def _check_clamav() -> dict[str, Any]:
     t0 = time.monotonic()
     try:
         import asyncio
+
         reader, writer = await asyncio.wait_for(
             asyncio.open_connection(settings.CLAMAV_HOST, settings.CLAMAV_PORT),
             timeout=2,
@@ -84,7 +88,7 @@ async def _check_clamav() -> dict[str, Any]:
             "status": "ok" if ok else "degraded",
             "latency_ms": round((time.monotonic() - t0) * 1000, 1),
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("health_clamav_failed", error=str(exc))
         return {"status": "degraded", "detail": str(exc)}
 
@@ -94,14 +98,15 @@ async def health(db: DbDep) -> HealthStatus:
     """Full health check — all external dependencies."""
     checks: dict[str, Any] = {}
     checks["database"] = await _check_database(db)
-    checks["redis"]    = await _check_redis()
-    checks["s3"]       = await _check_s3()
-    checks["clamav"]   = await _check_clamav()
+    checks["redis"] = await _check_redis()
+    checks["s3"] = await _check_s3()
+    checks["clamav"] = await _check_clamav()
 
     # overall: error if any critical service is down; degraded if optional is down
     critical = {"database", "redis"}
-    statuses = {k: (v if isinstance(v, str) else v.get("status", "error"))
-                for k, v in checks.items()}
+    statuses = {
+        k: (v if isinstance(v, str) else v.get("status", "error")) for k, v in checks.items()
+    }
     if any(statuses[k] == "error" for k in critical):
         overall = "error"
     elif any(s != "ok" for s in statuses.values()):
@@ -121,7 +126,7 @@ async def liveness() -> dict[str, str]:
 @router.get("/health/ready", tags=["system"])
 async def readiness(db: DbDep) -> dict[str, Any]:
     """Kubernetes readiness probe — 200 only if DB and Redis are reachable."""
-    db_check    = await _check_database(db)
+    db_check = await _check_database(db)
     redis_check = await _check_redis()
 
     ready = db_check["status"] == "ok" and redis_check["status"] == "ok"

@@ -14,13 +14,19 @@ Usage:
     result = execute_fsm_transition(spec, current_state="draft",
                                     transition_name="submit", ...)
 """
+
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.engine.interpreter import ExecutionContext, ExecutionResult, evaluate_conditions, execute_actions
+from app.engine.interpreter import (
+    ExecutionContext,
+    ExecutionResult,
+    evaluate_conditions,
+    execute_actions,
+)
 
 
 class FSMError(Exception):
@@ -53,6 +59,7 @@ class TerminalStateError(FSMError):
 # Spec data structures (converted from DB rows before evaluation)
 # ------------------------------------------------------------------
 
+
 @dataclass
 class StateSpec:
     name: str
@@ -81,7 +88,7 @@ class TransitionSpec:
 class FSMSpec:
     workflow_id: str
     initial_state: str
-    states: dict[str, StateSpec]       # state name → StateSpec
+    states: dict[str, StateSpec]  # state name → StateSpec
     transitions: list[TransitionSpec]
 
     def get_state(self, name: str) -> StateSpec | None:
@@ -100,6 +107,7 @@ class FSMSpec:
 # ------------------------------------------------------------------
 # Builder: converts DB model rows → FSMSpec
 # ------------------------------------------------------------------
+
 
 def build_fsm_spec(
     workflow_def: Any,
@@ -145,6 +153,7 @@ def build_fsm_spec(
 # Transition result
 # ------------------------------------------------------------------
 
+
 @dataclass
 class FSMTransitionResult:
     new_state: str
@@ -161,6 +170,7 @@ class FSMTransitionResult:
 # ------------------------------------------------------------------
 # Core evaluator
 # ------------------------------------------------------------------
+
 
 def execute_fsm_transition(
     spec: FSMSpec,
@@ -196,9 +206,8 @@ def execute_fsm_transition(
         raise TransitionNotFoundError(current_state, transition_name)
 
     # 2. Role check
-    if transition.required_roles:
-        if not any(r in actor_roles for r in transition.required_roles):
-            raise InsufficientRolesError(transition.required_roles)
+    if transition.required_roles and not any(r in actor_roles for r in transition.required_roles):
+        raise InsufficientRolesError(transition.required_roles)
 
     # 3. Guard conditions
     ctx = ExecutionContext(
@@ -208,11 +217,8 @@ def execute_fsm_transition(
         event="workflow.transition",
         actor_id=actor_id,
     )
-    if transition.guard_conditions:
-        if not evaluate_conditions(transition.guard_conditions, ctx):
-            raise GuardNotMetError(
-                f"Guard conditions for transition '{transition_name}' not met"
-            )
+    if transition.guard_conditions and not evaluate_conditions(transition.guard_conditions, ctx):
+        raise GuardNotMetError(f"Guard conditions for transition '{transition_name}' not met")
 
     result = FSMTransitionResult(new_state=transition.to_state)
 
@@ -255,6 +261,7 @@ def _merge_actions(
 # ------------------------------------------------------------------
 # Start helper (initial state entry)
 # ------------------------------------------------------------------
+
 
 def enter_initial_state(
     spec: FSMSpec,

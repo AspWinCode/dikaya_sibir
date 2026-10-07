@@ -11,7 +11,7 @@ from app.models.ui import Page
 from app.schemas.modules import AppModuleRead, ModuleConflict, ModuleInstallResult, ModuleRead
 
 
-class ModuleNotFoundError(Exception):
+class AppModuleNotFoundError(Exception):
     pass
 
 
@@ -26,125 +26,392 @@ class ModuleDependencyError(Exception):
 MODULE_MANIFESTS: dict[str, dict[str, Any]] = {
     "enterprise": {
         "entities": [
-            ("departments", "Отделы", [("name", "Название", "text"), ("parent", "Родительский отдел", "text")]),
-            ("employees", "Сотрудники", [("full_name", "ФИО", "text"), ("email", "Email", "email"), ("department", "Отдел", "text")]),
-            ("positions", "Должности", [("name", "Название", "text"), ("level", "Уровень", "number")]),
-            ("counterparties", "Контрагенты", [
-                ("name", "Название", "text"),
-                ("tax_id", "ИНН", "text"),
-                ("type", "Тип", "select", {"choices": ["ООО", "ИП", "АО", "ПАО", "ГУП", "НКО", "Другое"]}),
-            ]),
+            (
+                "departments",
+                "Отделы",
+                [("name", "Название", "text"), ("parent", "Родительский отдел", "text")],
+            ),
+            (
+                "employees",
+                "Сотрудники",
+                [
+                    ("full_name", "ФИО", "text"),
+                    ("email", "Email", "email"),
+                    ("department", "Отдел", "text"),
+                ],
+            ),
+            (
+                "positions",
+                "Должности",
+                [("name", "Название", "text"), ("level", "Уровень", "number")],
+            ),
+            (
+                "counterparties",
+                "Контрагенты",
+                [
+                    ("name", "Название", "text"),
+                    ("tax_id", "ИНН", "text"),
+                    (
+                        "type",
+                        "Тип",
+                        "select",
+                        {"choices": ["ООО", "ИП", "АО", "ПАО", "ГУП", "НКО", "Другое"]},
+                    ),
+                ],
+            ),
         ],
         "pages": [("enterprise", "Предприятие", "table", "employees")],
     },
     "warehouse": {
         "dependencies": ["enterprise"],
         "entities": [
-            ("products", "Товары", [("name", "Название", "text"), ("sku", "Артикул", "text"), ("unit", "Единица измерения", "text")]),
-            ("warehouses", "Склады", [("name", "Название", "text"), ("location", "Местоположение", "text")]),
-            ("stock_balances", "Остатки", [("product", "Товар", "text"), ("warehouse", "Склад", "text"), ("quantity", "Количество", "number")]),
-            ("stock_operations", "Складские операции", [
-                ("operation_type", "Тип операции", "select", {"choices": ["Приход", "Расход", "Перемещение", "Списание", "Инвентаризация"]}),
-                ("product", "Товар", "text"),
-                ("quantity", "Количество", "number"),
-            ]),
+            (
+                "products",
+                "Товары",
+                [
+                    ("name", "Название", "text"),
+                    ("sku", "Артикул", "text"),
+                    ("unit", "Единица измерения", "text"),
+                ],
+            ),
+            (
+                "warehouses",
+                "Склады",
+                [("name", "Название", "text"), ("location", "Местоположение", "text")],
+            ),
+            (
+                "stock_balances",
+                "Остатки",
+                [
+                    ("product", "Товар", "text"),
+                    ("warehouse", "Склад", "text"),
+                    ("quantity", "Количество", "number"),
+                ],
+            ),
+            (
+                "stock_operations",
+                "Складские операции",
+                [
+                    (
+                        "operation_type",
+                        "Тип операции",
+                        "select",
+                        {
+                            "choices": [
+                                "Приход",
+                                "Расход",
+                                "Перемещение",
+                                "Списание",
+                                "Инвентаризация",
+                            ]
+                        },
+                    ),
+                    ("product", "Товар", "text"),
+                    ("quantity", "Количество", "number"),
+                ],
+            ),
         ],
         "pages": [("warehouse", "Склад", "table", "products")],
     },
     "production": {
         "dependencies": ["enterprise", "warehouse"],
         "entities": [
-            ("production_orders", "Производственные заказы", [
-                ("number", "Номер", "text"),
-                ("status", "Статус", "select", {"choices": ["Черновик", "В производстве", "Завершён", "Отменён"]}),
-                ("due_date", "Срок", "date"),
-            ]),
-            ("bom", "Спецификации (BOM)", [("product", "Продукт", "text"), ("component", "Компонент", "text"), ("quantity", "Количество", "number")]),
-            ("production_operations", "Производственные операции", [("name", "Название", "text"), ("work_center", "Рабочий центр", "text"), ("duration", "Длительность", "number")]),
+            (
+                "production_orders",
+                "Производственные заказы",
+                [
+                    ("number", "Номер", "text"),
+                    (
+                        "status",
+                        "Статус",
+                        "select",
+                        {"choices": ["Черновик", "В производстве", "Завершён", "Отменён"]},
+                    ),
+                    ("due_date", "Срок", "date"),
+                ],
+            ),
+            (
+                "bom",
+                "Спецификации (BOM)",
+                [
+                    ("product", "Продукт", "text"),
+                    ("component", "Компонент", "text"),
+                    ("quantity", "Количество", "number"),
+                ],
+            ),
+            (
+                "production_operations",
+                "Производственные операции",
+                [
+                    ("name", "Название", "text"),
+                    ("work_center", "Рабочий центр", "text"),
+                    ("duration", "Длительность", "number"),
+                ],
+            ),
         ],
         "pages": [("production", "Производство", "table", "production_orders")],
     },
     "orders": {
         "dependencies": ["enterprise", "warehouse"],
         "entities": [
-            ("customer_orders", "Заказы клиентов", [
-                ("number", "Номер", "text"),
-                ("customer", "Клиент", "text"),
-                ("status", "Статус", "select", {"choices": ["Новый", "Подтверждён", "Отгружен", "Завершён", "Отменён"]}),
-            ]),
-            ("order_items", "Позиции заказа", [("order", "Заказ", "text"), ("product", "Товар", "text"), ("quantity", "Количество", "number")]),
-            ("shipments", "Отгрузки", [("number", "Номер", "text"), ("order", "Заказ", "text"), ("shipped_at", "Дата отгрузки", "datetime")]),
+            (
+                "customer_orders",
+                "Заказы клиентов",
+                [
+                    ("number", "Номер", "text"),
+                    ("customer", "Клиент", "text"),
+                    (
+                        "status",
+                        "Статус",
+                        "select",
+                        {"choices": ["Новый", "Подтверждён", "Отгружен", "Завершён", "Отменён"]},
+                    ),
+                ],
+            ),
+            (
+                "order_items",
+                "Позиции заказа",
+                [
+                    ("order", "Заказ", "text"),
+                    ("product", "Товар", "text"),
+                    ("quantity", "Количество", "number"),
+                ],
+            ),
+            (
+                "shipments",
+                "Отгрузки",
+                [
+                    ("number", "Номер", "text"),
+                    ("order", "Заказ", "text"),
+                    ("shipped_at", "Дата отгрузки", "datetime"),
+                ],
+            ),
         ],
         "pages": [("orders", "Заказы", "table", "customer_orders")],
     },
     "finance": {
         "dependencies": ["enterprise"],
         "entities": [
-            ("budget_items", "Статьи бюджета", [("name", "Название", "text"), ("code", "Код", "text")]),
-            ("payment_documents", "Платёжные документы", [
-                ("number", "Номер", "text"),
-                ("amount", "Сумма", "decimal"),
-                ("status", "Статус", "select", {"choices": ["Черновик", "На согласовании", "Оплачен", "Отменён"]}),
-            ]),
-            ("transactions", "Транзакции", [("amount", "Сумма", "decimal"), ("counterparty", "Контрагент", "text"), ("posted_at", "Дата проводки", "datetime")]),
-            ("budgets", "Бюджеты", [("name", "Название", "text"), ("period", "Период", "text"), ("amount", "Сумма", "decimal")]),
+            (
+                "budget_items",
+                "Статьи бюджета",
+                [("name", "Название", "text"), ("code", "Код", "text")],
+            ),
+            (
+                "payment_documents",
+                "Платёжные документы",
+                [
+                    ("number", "Номер", "text"),
+                    ("amount", "Сумма", "decimal"),
+                    (
+                        "status",
+                        "Статус",
+                        "select",
+                        {"choices": ["Черновик", "На согласовании", "Оплачен", "Отменён"]},
+                    ),
+                ],
+            ),
+            (
+                "transactions",
+                "Транзакции",
+                [
+                    ("amount", "Сумма", "decimal"),
+                    ("counterparty", "Контрагент", "text"),
+                    ("posted_at", "Дата проводки", "datetime"),
+                ],
+            ),
+            (
+                "budgets",
+                "Бюджеты",
+                [
+                    ("name", "Название", "text"),
+                    ("period", "Период", "text"),
+                    ("amount", "Сумма", "decimal"),
+                ],
+            ),
         ],
         "pages": [("finance", "Финансы", "table", "payment_documents")],
     },
     "contracts": {
         "dependencies": ["enterprise"],
         "entities": [
-            ("contracts", "Договоры", [
-                ("number", "Номер", "text"),
-                ("counterparty", "Контрагент", "text"),
-                ("status", "Статус", "select", {"choices": ["Проект", "На согласовании", "Действующий", "Расторгнут", "Истёк"]}),
-            ]),
-            ("contract_attachments", "Вложения договоров", [("contract", "Договор", "text"), ("name", "Название", "text"), ("file", "Файл", "file")]),
-            ("contract_stages", "Этапы договоров", [("contract", "Договор", "text"), ("stage", "Этап", "text"), ("due_date", "Срок", "date")]),
+            (
+                "contracts",
+                "Договоры",
+                [
+                    ("number", "Номер", "text"),
+                    ("counterparty", "Контрагент", "text"),
+                    (
+                        "status",
+                        "Статус",
+                        "select",
+                        {
+                            "choices": [
+                                "Проект",
+                                "На согласовании",
+                                "Действующий",
+                                "Расторгнут",
+                                "Истёк",
+                            ]
+                        },
+                    ),
+                ],
+            ),
+            (
+                "contract_attachments",
+                "Вложения договоров",
+                [
+                    ("contract", "Договор", "text"),
+                    ("name", "Название", "text"),
+                    ("file", "Файл", "file"),
+                ],
+            ),
+            (
+                "contract_stages",
+                "Этапы договоров",
+                [
+                    ("contract", "Договор", "text"),
+                    ("stage", "Этап", "text"),
+                    ("due_date", "Срок", "date"),
+                ],
+            ),
         ],
         "pages": [("contracts", "Договоры", "table", "contracts")],
     },
     "hr": {
         "dependencies": ["enterprise"],
         "entities": [
-            ("candidates", "Кандидаты", [
-                ("full_name", "ФИО", "text"),
-                ("email", "Email", "email"),
-                ("status", "Статус", "select", {"choices": ["Новый", "Телефонное интервью", "Интервью", "Оффер", "Принят", "Отказ"]}),
-            ]),
-            ("hiring_requests", "Заявки на найм", [
-                ("position", "Должность", "text"),
-                ("department", "Отдел", "text"),
-                ("status", "Статус", "select", {"choices": ["Открыта", "В работе", "Приостановлена", "Закрыта"]}),
-            ]),
-            ("reviews", "Оценки", [("employee", "Сотрудник", "text"), ("score", "Оценка", "number"), ("period", "Период", "text")]),
-            ("training", "Обучение", [("name", "Название", "text"), ("employee", "Сотрудник", "text"), ("completed", "Завершено", "boolean")]),
-            ("vacations", "Отпуска", [("employee", "Сотрудник", "text"), ("start_date", "Дата начала", "date"), ("end_date", "Дата окончания", "date")]),
+            (
+                "candidates",
+                "Кандидаты",
+                [
+                    ("full_name", "ФИО", "text"),
+                    ("email", "Email", "email"),
+                    (
+                        "status",
+                        "Статус",
+                        "select",
+                        {
+                            "choices": [
+                                "Новый",
+                                "Телефонное интервью",
+                                "Интервью",
+                                "Оффер",
+                                "Принят",
+                                "Отказ",
+                            ]
+                        },
+                    ),
+                ],
+            ),
+            (
+                "hiring_requests",
+                "Заявки на найм",
+                [
+                    ("position", "Должность", "text"),
+                    ("department", "Отдел", "text"),
+                    (
+                        "status",
+                        "Статус",
+                        "select",
+                        {"choices": ["Открыта", "В работе", "Приостановлена", "Закрыта"]},
+                    ),
+                ],
+            ),
+            (
+                "reviews",
+                "Оценки",
+                [
+                    ("employee", "Сотрудник", "text"),
+                    ("score", "Оценка", "number"),
+                    ("period", "Период", "text"),
+                ],
+            ),
+            (
+                "training",
+                "Обучение",
+                [
+                    ("name", "Название", "text"),
+                    ("employee", "Сотрудник", "text"),
+                    ("completed", "Завершено", "boolean"),
+                ],
+            ),
+            (
+                "vacations",
+                "Отпуска",
+                [
+                    ("employee", "Сотрудник", "text"),
+                    ("start_date", "Дата начала", "date"),
+                    ("end_date", "Дата окончания", "date"),
+                ],
+            ),
         ],
         "pages": [("hr", "HR", "table", "candidates")],
     },
     "projects": {
         "dependencies": ["enterprise"],
         "entities": [
-            ("projects", "Проекты", [
-                ("name", "Название", "text"),
-                ("status", "Статус", "select", {"choices": ["Планирование", "В работе", "На паузе", "Завершён", "Отменён"]}),
-                ("owner", "Владелец", "text"),
-            ]),
-            ("tasks", "Задачи", [
-                ("title", "Заголовок", "text"),
-                ("status", "Статус", "select", {"choices": ["К выполнению", "В работе", "На проверке", "Готово"]}),
-                ("assignee", "Исполнитель", "text"),
-            ]),
+            (
+                "projects",
+                "Проекты",
+                [
+                    ("name", "Название", "text"),
+                    (
+                        "status",
+                        "Статус",
+                        "select",
+                        {
+                            "choices": [
+                                "Планирование",
+                                "В работе",
+                                "На паузе",
+                                "Завершён",
+                                "Отменён",
+                            ]
+                        },
+                    ),
+                    ("owner", "Владелец", "text"),
+                ],
+            ),
+            (
+                "tasks",
+                "Задачи",
+                [
+                    ("title", "Заголовок", "text"),
+                    (
+                        "status",
+                        "Статус",
+                        "select",
+                        {"choices": ["К выполнению", "В работе", "На проверке", "Готово"]},
+                    ),
+                    ("assignee", "Исполнитель", "text"),
+                ],
+            ),
             ("milestones", "Вехи", [("name", "Название", "text"), ("due_date", "Срок", "date")]),
-            ("resources", "Ресурсы", [("name", "Название", "text"), ("capacity", "Мощность", "number")]),
+            (
+                "resources",
+                "Ресурсы",
+                [("name", "Название", "text"), ("capacity", "Мощность", "number")],
+            ),
         ],
         "pages": [("projects", "Проекты", "kanban", "projects")],
     },
     "analytics": {
         "entities": [
-            ("kpis", "KPI", [("name", "Название", "text"), ("value", "Значение", "decimal"), ("target", "Цель", "decimal")]),
-            ("dashboards", "Дашборды", [("name", "Название", "text"), ("owner", "Владелец", "text")]),
+            (
+                "kpis",
+                "KPI",
+                [
+                    ("name", "Название", "text"),
+                    ("value", "Значение", "decimal"),
+                    ("target", "Цель", "decimal"),
+                ],
+            ),
+            (
+                "dashboards",
+                "Дашборды",
+                [("name", "Название", "text"), ("owner", "Владелец", "text")],
+            ),
             ("reports", "Отчёты", [("name", "Название", "text"), ("source", "Источник", "text")]),
         ],
         "pages": [("analytics", "Аналитика", "dashboard", "kpis")],
@@ -162,7 +429,19 @@ MODULE_MANIFESTS: dict[str, dict[str, Any]] = {
                     ("case_code", "Дело", "text"),
                     ("counterparty", "Контрагент", "text"),
                     ("author", "Автор", "text"),
-                    ("status", "Статус", "select", {"choices": ["Черновик", "На регистрации", "Зарегистрирован", "Архивирован"]}),
+                    (
+                        "status",
+                        "Статус",
+                        "select",
+                        {
+                            "choices": [
+                                "Черновик",
+                                "На регистрации",
+                                "Зарегистрирован",
+                                "Архивирован",
+                            ]
+                        },
+                    ),
                     ("registered_at", "Дата регистрации", "datetime"),
                     ("retention_until", "Хранить до", "date"),
                 ],
@@ -174,7 +453,21 @@ MODULE_MANIFESTS: dict[str, dict[str, Any]] = {
                     ("code", "Код дела", "text"),
                     ("index", "Индекс номенклатуры", "text"),
                     ("title", "Заголовок", "text"),
-                    ("category", "Категория", "select", {"choices": ["Приказы", "Договоры", "Финансы", "Кадры", "Переписка", "Прочее"]}),
+                    (
+                        "category",
+                        "Категория",
+                        "select",
+                        {
+                            "choices": [
+                                "Приказы",
+                                "Договоры",
+                                "Финансы",
+                                "Кадры",
+                                "Переписка",
+                                "Прочее",
+                            ]
+                        },
+                    ),
                     ("owner_department", "Отдел-владелец", "text"),
                     ("retention_years", "Срок хранения (лет)", "number"),
                     ("opened_at", "Дата открытия", "date"),
@@ -191,18 +484,56 @@ MODULE_MANIFESTS: dict[str, dict[str, Any]] = {
     "it_support": {
         "dependencies": ["enterprise"],
         "entities": [
-            ("tickets", "Заявки", [
-                ("title", "Заголовок", "text"),
-                ("priority", "Приоритет", "select", {"choices": ["Низкий", "Средний", "Высокий", "Критический"]}),
-                ("status", "Статус", "select", {"choices": ["Новая", "В работе", "Ожидание", "Решена", "Закрыта"]}),
-            ]),
-            ("equipment", "Оборудование", [("name", "Название", "text"), ("serial", "Серийный номер", "text"), ("owner", "Владелец", "text")]),
-            ("incidents", "Инциденты", [
-                ("title", "Заголовок", "text"),
-                ("severity", "Серьёзность", "select", {"choices": ["Низкая", "Средняя", "Высокая", "Критическая"]}),
-                ("resolved", "Решено", "boolean"),
-            ]),
-            ("sla_policies", "SLA-политики", [("name", "Название", "text"), ("response_minutes", "Время ответа (мин)", "number")]),
+            (
+                "tickets",
+                "Заявки",
+                [
+                    ("title", "Заголовок", "text"),
+                    (
+                        "priority",
+                        "Приоритет",
+                        "select",
+                        {"choices": ["Низкий", "Средний", "Высокий", "Критический"]},
+                    ),
+                    (
+                        "status",
+                        "Статус",
+                        "select",
+                        {"choices": ["Новая", "В работе", "Ожидание", "Решена", "Закрыта"]},
+                    ),
+                ],
+            ),
+            (
+                "equipment",
+                "Оборудование",
+                [
+                    ("name", "Название", "text"),
+                    ("serial", "Серийный номер", "text"),
+                    ("owner", "Владелец", "text"),
+                ],
+            ),
+            (
+                "incidents",
+                "Инциденты",
+                [
+                    ("title", "Заголовок", "text"),
+                    (
+                        "severity",
+                        "Серьёзность",
+                        "select",
+                        {"choices": ["Низкая", "Средняя", "Высокая", "Критическая"]},
+                    ),
+                    ("resolved", "Решено", "boolean"),
+                ],
+            ),
+            (
+                "sla_policies",
+                "SLA-политики",
+                [
+                    ("name", "Название", "text"),
+                    ("response_minutes", "Время ответа (мин)", "number"),
+                ],
+            ),
         ],
         "pages": [("it-support", "IT-поддержка", "kanban", "tickets")],
     },
@@ -214,14 +545,24 @@ class ModuleService:
         self._db = db
 
     async def list_modules(self, app_id: uuid.UUID | None = None) -> list[ModuleRead]:
-        modules = (await self._db.execute(select(Module).where(Module.is_active.is_(True)).order_by(Module.name))).scalars().all()
+        modules = (
+            (
+                await self._db.execute(
+                    select(Module).where(Module.is_active.is_(True)).order_by(Module.name)
+                )
+            )
+            .scalars()
+            .all()
+        )
         installed: dict[uuid.UUID, str] = {}
         if app_id:
-            rows = (await self._db.execute(
-                select(AppModule, ModuleVersion)
-                .join(ModuleVersion, ModuleVersion.id == AppModule.module_version_id)
-                .where(AppModule.app_id == app_id, AppModule.status == "installed")
-            )).all()
+            rows = (
+                await self._db.execute(
+                    select(AppModule, ModuleVersion)
+                    .join(ModuleVersion, ModuleVersion.id == AppModule.module_version_id)
+                    .where(AppModule.app_id == app_id, AppModule.status == "installed")
+                )
+            ).all()
             installed = {row[0].module_id: row[1].version for row in rows}
 
         result: list[ModuleRead] = []
@@ -240,13 +581,15 @@ class ModuleService:
         return result
 
     async def list_app_modules(self, app_id: uuid.UUID) -> list[AppModuleRead]:
-        rows = (await self._db.execute(
-            select(AppModule, Module, ModuleVersion)
-            .join(Module, Module.id == AppModule.module_id)
-            .join(ModuleVersion, ModuleVersion.id == AppModule.module_version_id)
-            .where(AppModule.app_id == app_id, AppModule.status == "installed")
-            .order_by(Module.name)
-        )).all()
+        rows = (
+            await self._db.execute(
+                select(AppModule, Module, ModuleVersion)
+                .join(Module, Module.id == AppModule.module_id)
+                .join(ModuleVersion, ModuleVersion.id == AppModule.module_version_id)
+                .where(AppModule.app_id == app_id, AppModule.status == "installed")
+                .order_by(Module.name)
+            )
+        ).all()
         return [
             AppModuleRead(
                 app_id=row[0].app_id,
@@ -272,7 +615,7 @@ class ModuleService:
         module = await self._module_by_code(module_code)
         version = await self._current_version(module.id)
         if version is None:
-            raise ModuleNotFoundError(f"No current version for module {module_code}")
+            raise AppModuleNotFoundError(f"No current version for module {module_code}")
 
         seen = _seen or set()
         if module.code in seen:
@@ -330,30 +673,38 @@ class ModuleService:
 
         # 1. Delete pages (no data risk)
         for page_def in manifest.get("pages", []):
-            page = (await self._db.execute(
-                select(Page).where(Page.app_id == app_id, Page.slug == page_def[0])
-            )).scalar_one_or_none()
+            page = (
+                await self._db.execute(
+                    select(Page).where(Page.app_id == app_id, Page.slug == page_def[0])
+                )
+            ).scalar_one_or_none()
             if page:
                 await self._db.delete(page)
 
         # 2. Delete sequences and entities that have no records
         for ent_def in manifest.get("entities", []):
-            entity = (await self._db.execute(
-                select(Entity).where(Entity.app_id == app_id, Entity.slug == ent_def[0])
-            )).scalar_one_or_none()
+            entity = (
+                await self._db.execute(
+                    select(Entity).where(Entity.app_id == app_id, Entity.slug == ent_def[0])
+                )
+            ).scalar_one_or_none()
             if entity is None:
                 continue
-            live_records = (await self._db.execute(
-                select(func.count()).where(
-                    Record.entity_id == entity.id,
-                    Record.is_deleted.is_(False),
+            live_records = (
+                await self._db.execute(
+                    select(func.count()).where(
+                        Record.entity_id == entity.id,
+                        Record.is_deleted.is_(False),
+                    )
                 )
-            )).scalar_one()
+            ).scalar_one()
             if live_records > 0:
                 continue  # data exists — skip to preserve it
-            seqs = (await self._db.execute(
-                select(Sequence).where(Sequence.entity_id == entity.id)
-            )).scalars().all()
+            seqs = (
+                (await self._db.execute(select(Sequence).where(Sequence.entity_id == entity.id)))
+                .scalars()
+                .all()
+            )
             for seq in seqs:
                 await self._db.delete(seq)
             await self._db.delete(entity)  # fields cascade via ondelete="CASCADE"
@@ -366,12 +717,14 @@ class ModuleService:
 
     async def _build_entity_source_map(self, app_id: uuid.UUID) -> dict[str, str]:
         """Returns {entity_slug: module_code} for all entities owned by installed modules."""
-        rows = (await self._db.execute(
-            select(Module.code, ModuleVersion.manifest)
-            .join(AppModule, AppModule.module_id == Module.id)
-            .join(ModuleVersion, ModuleVersion.id == AppModule.module_version_id)
-            .where(AppModule.app_id == app_id, AppModule.status == "installed")
-        )).all()
+        rows = (
+            await self._db.execute(
+                select(Module.code, ModuleVersion.manifest)
+                .join(AppModule, AppModule.module_id == Module.id)
+                .join(ModuleVersion, ModuleVersion.id == AppModule.module_version_id)
+                .where(AppModule.app_id == app_id, AppModule.status == "installed")
+            )
+        ).all()
         source_map: dict[str, str] = {}
         for code, manifest in rows:
             for ent in manifest.get("entities", []):
@@ -380,12 +733,14 @@ class ModuleService:
 
     async def _build_page_source_map(self, app_id: uuid.UUID) -> dict[str, str]:
         """Returns {page_slug: module_code} for all pages owned by installed modules."""
-        rows = (await self._db.execute(
-            select(Module.code, ModuleVersion.manifest)
-            .join(AppModule, AppModule.module_id == Module.id)
-            .join(ModuleVersion, ModuleVersion.id == AppModule.module_version_id)
-            .where(AppModule.app_id == app_id, AppModule.status == "installed")
-        )).all()
+        rows = (
+            await self._db.execute(
+                select(Module.code, ModuleVersion.manifest)
+                .join(AppModule, AppModule.module_id == Module.id)
+                .join(ModuleVersion, ModuleVersion.id == AppModule.module_version_id)
+                .where(AppModule.app_id == app_id, AppModule.status == "installed")
+            )
+        ).all()
         source_map: dict[str, str] = {}
         for code, manifest in rows:
             for pg in manifest.get("pages", []):
@@ -405,38 +760,46 @@ class ModuleService:
 
         for ent in manifest.get("entities", []):
             slug, display_name, fields = ent
-            entity = (await self._db.execute(
-                select(Entity).where(Entity.app_id == app_id, Entity.slug == slug)
-            )).scalar_one_or_none()
+            entity = (
+                await self._db.execute(
+                    select(Entity).where(Entity.app_id == app_id, Entity.slug == slug)
+                )
+            ).scalar_one_or_none()
             if entity is None:
                 entity = Entity(app_id=app_id, slug=slug, display_name=display_name)
                 self._db.add(entity)
                 await self._db.flush()
                 entities_created += 1
             else:
-                conflicts.append(ModuleConflict(
-                    kind="entity",
-                    name=slug,
-                    source=entity_source.get(slug, "manual"),
-                    action="reused",
-                ))
+                conflicts.append(
+                    ModuleConflict(
+                        kind="entity",
+                        name=slug,
+                        source=entity_source.get(slug, "manual"),
+                        action="reused",
+                    )
+                )
             entity_ids[slug] = entity.id
 
             existing_fields = {
                 f.name
-                for f in (await self._db.execute(select(Field).where(Field.entity_id == entity.id))).scalars()
+                for f in (
+                    await self._db.execute(select(Field).where(Field.entity_id == entity.id))
+                ).scalars()
             }
             for order, field_def in enumerate(fields):
                 name, field_display, field_type = field_def[0], field_def[1], field_def[2]
                 raw_opts: dict = field_def[3] if len(field_def) > 3 else {}
                 if name in existing_fields:
-                    conflicts.append(ModuleConflict(
-                        kind="field",
-                        name=name,
-                        entity=slug,
-                        source=entity_source.get(slug, "manual"),
-                        action="skipped",
-                    ))
+                    conflicts.append(
+                        ModuleConflict(
+                            kind="field",
+                            name=name,
+                            entity=slug,
+                            source=entity_source.get(slug, "manual"),
+                            action="skipped",
+                        )
+                    )
                     continue
                 field_options: dict = {}
                 if raw_opts.get("choices"):
@@ -460,12 +823,14 @@ class ModuleService:
             entity_id = entity_ids.get(entity_slug)
             if entity_id is None:
                 continue
-            existing_sequence = (await self._db.execute(
-                select(Sequence).where(
-                    Sequence.entity_id == entity_id,
-                    Sequence.field_name == field_name,
+            existing_sequence = (
+                await self._db.execute(
+                    select(Sequence).where(
+                        Sequence.entity_id == entity_id,
+                        Sequence.field_name == field_name,
+                    )
                 )
-            )).scalar_one_or_none()
+            ).scalar_one_or_none()
             if existing_sequence is not None:
                 continue
             self._db.add(
@@ -488,26 +853,34 @@ class ModuleService:
             entity_hint: str | None = page_def[3] if len(page_def) > 3 else None
             bound_entity_id = (
                 entity_ids.get(entity_hint, fallback_entity_id)
-                if entity_hint else fallback_entity_id
+                if entity_hint
+                else fallback_entity_id
             )
-            exists = (await self._db.execute(
-                select(Page).where(Page.app_id == app_id, Page.slug == slug)
-            )).scalar_one_or_none()
+            exists = (
+                await self._db.execute(select(Page).where(Page.app_id == app_id, Page.slug == slug))
+            ).scalar_one_or_none()
             if exists is not None:
-                conflicts.append(ModuleConflict(
-                    kind="page",
-                    name=slug,
-                    source=page_source.get(slug, "manual"),
-                    action="skipped",
-                ))
+                conflicts.append(
+                    ModuleConflict(
+                        kind="page",
+                        name=slug,
+                        source=page_source.get(slug, "manual"),
+                        action="skipped",
+                    )
+                )
                 continue
             self._db.add(
                 Page(
                     app_id=app_id,
                     slug=slug,
                     title=title,
-                    layout={"view_type": view_type, "entity_id": str(bound_entity_id) if bound_entity_id else None},
-                    blocks=[{"id": f"{slug}-main", "type": view_type, "title": title, "config": {}}],
+                    layout={
+                        "view_type": view_type,
+                        "entity_id": str(bound_entity_id) if bound_entity_id else None,
+                    },
+                    blocks=[
+                        {"id": f"{slug}-main", "type": view_type, "title": title, "config": {}}
+                    ],
                     is_published=True,
                 )
             )
@@ -521,9 +894,11 @@ class ModuleService:
         if app_id:
             row = await self._app_module(app_id, module.id)
             if row and row.status == "installed":
-                ver = (await self._db.execute(
-                    select(ModuleVersion).where(ModuleVersion.id == row.module_version_id)
-                )).scalar_one()
+                ver = (
+                    await self._db.execute(
+                        select(ModuleVersion).where(ModuleVersion.id == row.module_version_id)
+                    )
+                ).scalar_one()
                 installed_version = ver.version
         return self._module_read(
             module,
@@ -559,52 +934,76 @@ class ModuleService:
         )
 
     async def _module_by_code(self, code: str) -> Module:
-        module = (await self._db.execute(select(Module).where(Module.code == code))).scalar_one_or_none()
+        module = (
+            await self._db.execute(select(Module).where(Module.code == code))
+        ).scalar_one_or_none()
         if module is None:
-            raise ModuleNotFoundError(code)
+            raise AppModuleNotFoundError(code)
         return module
 
     async def _current_version(self, module_id: uuid.UUID) -> ModuleVersion | None:
-        return (await self._db.execute(
-            select(ModuleVersion).where(
-                ModuleVersion.module_id == module_id,
-                ModuleVersion.is_current.is_(True),
+        return (
+            await self._db.execute(
+                select(ModuleVersion).where(
+                    ModuleVersion.module_id == module_id,
+                    ModuleVersion.is_current.is_(True),
+                )
             )
-        )).scalar_one_or_none()
+        ).scalar_one_or_none()
 
     async def _dependency_codes(self, module_id: uuid.UUID) -> list[str]:
-        rows = (await self._db.execute(
-            select(Module.code)
-            .join(ModuleDependency, ModuleDependency.depends_on_id == Module.id)
-            .where(ModuleDependency.module_id == module_id)
-            .order_by(Module.code)
-        )).scalars().all()
+        rows = (
+            (
+                await self._db.execute(
+                    select(Module.code)
+                    .join(ModuleDependency, ModuleDependency.depends_on_id == Module.id)
+                    .where(ModuleDependency.module_id == module_id)
+                    .order_by(Module.code)
+                )
+            )
+            .scalars()
+            .all()
+        )
         return list(rows)
 
     async def _app_module(self, app_id: uuid.UUID, module_id: uuid.UUID) -> AppModule | None:
-        return (await self._db.execute(
-            select(AppModule).where(AppModule.app_id == app_id, AppModule.module_id == module_id)
-        )).scalar_one_or_none()
+        return (
+            await self._db.execute(
+                select(AppModule).where(
+                    AppModule.app_id == app_id, AppModule.module_id == module_id
+                )
+            )
+        ).scalar_one_or_none()
 
     async def _installed_dependents(self, app_id: uuid.UUID, module_id: uuid.UUID) -> list[str]:
-        rows = (await self._db.execute(
-            select(Module.code)
-            .join(ModuleDependency, ModuleDependency.module_id == Module.id)
-            .join(AppModule, AppModule.module_id == Module.id)
-            .where(
-                ModuleDependency.depends_on_id == module_id,
-                AppModule.app_id == app_id,
-                AppModule.status == "installed",
+        rows = (
+            (
+                await self._db.execute(
+                    select(Module.code)
+                    .join(ModuleDependency, ModuleDependency.module_id == Module.id)
+                    .join(AppModule, AppModule.module_id == Module.id)
+                    .where(
+                        ModuleDependency.depends_on_id == module_id,
+                        AppModule.app_id == app_id,
+                        AppModule.status == "installed",
+                    )
+                )
             )
-        )).scalars().all()
+            .scalars()
+            .all()
+        )
         return list(rows)
 
     async def _require_app_role(self, app_id: uuid.UUID, actor_id: uuid.UUID) -> None:
-        app_exists = (await self._db.execute(select(App.id).where(App.id == app_id))).scalar_one_or_none()
+        app_exists = (
+            await self._db.execute(select(App.id).where(App.id == app_id))
+        ).scalar_one_or_none()
         if app_exists is None:
-            raise ModuleNotFoundError("app")
-        member = (await self._db.execute(
-            select(AppMember).where(AppMember.app_id == app_id, AppMember.user_id == actor_id)
-        )).scalar_one_or_none()
+            raise AppModuleNotFoundError("app")
+        member = (
+            await self._db.execute(
+                select(AppMember).where(AppMember.app_id == app_id, AppMember.user_id == actor_id)
+            )
+        ).scalar_one_or_none()
         if member is None or member.role not in {"owner", "admin", "editor"}:
             raise ModulePermissionError("Insufficient app permissions")

@@ -1,5 +1,6 @@
 import enum
 import uuid
+from datetime import datetime
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -9,20 +10,21 @@ from app.models.base import Base
 
 
 class ViewType(str, enum.Enum):
-    TABLE    = "table"
-    FORM     = "form"
-    KANBAN   = "kanban"
+    TABLE = "table"
+    FORM = "form"
+    KANBAN = "kanban"
     CALENDAR = "calendar"
-    GALLERY  = "gallery"
-    DETAIL   = "detail"
+    GALLERY = "gallery"
+    DETAIL = "detail"
 
 
 class View(Base):
     __tablename__ = "view"
     __table_args__ = {"schema": "ui"}
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
-                                           server_default=sa.text("gen_random_uuid()"))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")
+    )
     app_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     name: Mapped[str] = mapped_column(sa.String(256), nullable=False)
@@ -31,10 +33,12 @@ class View(Base):
     is_default: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default="false")
     is_public: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default="true")
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
-    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False,
-                                                     server_default=sa.text("now()"))
-    updated_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False,
-                                                     server_default=sa.text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+    )
 
 
 class ViewFieldConfig(Base):
@@ -44,8 +48,9 @@ class ViewFieldConfig(Base):
         {"schema": "ui"},
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
-                                           server_default=sa.text("gen_random_uuid()"))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")
+    )
     view_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         sa.ForeignKey("ui.view.id", ondelete="CASCADE"),
@@ -67,8 +72,9 @@ class Page(Base):
         {"schema": "ui"},
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
-                                           server_default=sa.text("gen_random_uuid()"))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")
+    )
     app_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     slug: Mapped[str] = mapped_column(sa.String(128), nullable=False)
     title: Mapped[str] = mapped_column(sa.String(256), nullable=False)
@@ -78,11 +84,13 @@ class Page(Base):
     blocks: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
     breakpoints: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     is_published: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default="false")
-    published_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True))
-    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False,
-                                                     server_default=sa.text("now()"))
-    updated_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False,
-                                                     server_default=sa.text("now()"))
+    published_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+    )
 
 
 class PageRolePermission(Base):

@@ -1,4 +1,5 @@
 """WorkflowService: definition CRUD, instance lifecycle, transition execution."""
+
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -60,6 +61,7 @@ logger = structlog.get_logger(__name__)
 # Domain errors
 # ------------------------------------------------------------------
 
+
 class WorkflowNotFoundError(Exception):
     pass
 
@@ -82,11 +84,13 @@ class WorkflowInstanceAlreadyExistsError(Exception):
 
 class WorkflowTransitionError(Exception):
     """Raised when transition cannot be executed (guard, role, terminal)."""
+
     pass
 
 
 class WorkflowConcurrentModificationError(Exception):
     """Raised when conditional UPDATE finds the instance was concurrently modified."""
+
     def __init__(self, instance_id: uuid.UUID) -> None:
         super().__init__(f"Concurrent modification on instance {instance_id}")
         self.instance_id = instance_id
@@ -95,6 +99,7 @@ class WorkflowConcurrentModificationError(Exception):
 # ------------------------------------------------------------------
 # Service
 # ------------------------------------------------------------------
+
 
 class WorkflowService:
     def __init__(self, db: AsyncSession) -> None:
@@ -122,9 +127,7 @@ class WorkflowService:
         wf = await self._fetch_workflow(app_id, workflow_id)
         return WorkflowDefRead.model_validate(wf)
 
-    async def create_workflow(
-        self, app_id: uuid.UUID, data: WorkflowDefCreate
-    ) -> WorkflowDefRead:
+    async def create_workflow(self, app_id: uuid.UUID, data: WorkflowDefCreate) -> WorkflowDefRead:
         wf = WorkflowDef(
             app_id=app_id,
             entity_id=data.entity_id,
@@ -164,7 +167,9 @@ class WorkflowService:
         logger.info("workflow_activated", workflow_id=str(workflow_id))
         return WorkflowDefRead.model_validate(wf)
 
-    async def deactivate_workflow(self, app_id: uuid.UUID, workflow_id: uuid.UUID) -> WorkflowDefRead:
+    async def deactivate_workflow(
+        self, app_id: uuid.UUID, workflow_id: uuid.UUID
+    ) -> WorkflowDefRead:
         wf = await self._fetch_workflow(app_id, workflow_id)
         wf.is_active = False
         await self._db.flush()
@@ -176,14 +181,11 @@ class WorkflowService:
 
     async def list_states(self, workflow_id: uuid.UUID) -> list[StateDefRead]:
         result = await self._db.execute(
-            select(StateDef).where(StateDef.workflow_id == workflow_id)
-            .order_by(StateDef.name)
+            select(StateDef).where(StateDef.workflow_id == workflow_id).order_by(StateDef.name)
         )
         return [StateDefRead.model_validate(s) for s in result.scalars()]
 
-    async def create_state(
-        self, workflow_id: uuid.UUID, data: StateDefCreate
-    ) -> StateDefRead:
+    async def create_state(self, workflow_id: uuid.UUID, data: StateDefCreate) -> StateDefRead:
         state = StateDef(
             workflow_id=workflow_id,
             name=data.name,
@@ -243,7 +245,8 @@ class WorkflowService:
 
     async def list_transitions(self, workflow_id: uuid.UUID) -> list[TransitionDefRead]:
         result = await self._db.execute(
-            select(TransitionDef).where(TransitionDef.workflow_id == workflow_id)
+            select(TransitionDef)
+            .where(TransitionDef.workflow_id == workflow_id)
             .order_by(TransitionDef.display_order, TransitionDef.from_state, TransitionDef.name)
         )
         return [TransitionDefRead.model_validate(t) for t in result.scalars()]
@@ -251,10 +254,13 @@ class WorkflowService:
     async def create_transition(
         self, workflow_id: uuid.UUID, data: TransitionDefCreate
     ) -> TransitionDefRead:
-        existing_count = (await self._db.execute(
-            select(func.count()).select_from(TransitionDef)
-            .where(TransitionDef.workflow_id == workflow_id)
-        )).scalar_one()
+        existing_count = (
+            await self._db.execute(
+                select(func.count())
+                .select_from(TransitionDef)
+                .where(TransitionDef.workflow_id == workflow_id)
+            )
+        ).scalar_one()
         tr = TransitionDef(
             workflow_id=workflow_id,
             name=data.name,
@@ -291,9 +297,7 @@ class WorkflowService:
         await self._db.flush()
         return TransitionDefRead.model_validate(tr)
 
-    async def delete_transition(
-        self, workflow_id: uuid.UUID, transition_id: uuid.UUID
-    ) -> None:
+    async def delete_transition(self, workflow_id: uuid.UUID, transition_id: uuid.UUID) -> None:
         tr = await self._fetch_transition(workflow_id, transition_id)
         await self._db.delete(tr)
         await self._db.flush()
@@ -329,9 +333,7 @@ class WorkflowService:
         spec = build_fsm_spec(wf, states, transitions)
 
         # Run on_enter_actions for initial state (pure)
-        enter_result = enter_initial_state(
-            spec, req.record_payload, wf.entity_id, app_id, actor_id
-        )
+        enter_result = enter_initial_state(spec, req.record_payload, wf.entity_id, app_id, actor_id)
 
         sla_deadline: datetime | None = None
         if enter_result.sla_seconds:
@@ -370,9 +372,13 @@ class WorkflowService:
         self._dispatch_side_effects(instance, enter_result.notifications, enter_result.webhooks)
 
         workflow_instances_active.inc()
-        logger.info("workflow_instance_started", instance_id=str(instance.id),
-                    workflow_id=str(workflow_id), record_id=str(req.record_id),
-                    initial_state=wf.initial_state)
+        logger.info(
+            "workflow_instance_started",
+            instance_id=str(instance.id),
+            workflow_id=str(workflow_id),
+            record_id=str(req.record_id),
+            initial_state=wf.initial_state,
+        )
         return WorkflowInstanceRead.model_validate(instance)
 
     @staticmethod
@@ -397,9 +403,10 @@ class WorkflowService:
             record_ctx = notif.get("context", {})
             try:
                 from jinja2 import BaseLoader, Environment, select_autoescape
+
                 env = Environment(loader=BaseLoader(), autoescape=select_autoescape(["html"]))
                 body_html = env.from_string(template_str).render(**record_ctx)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 body_html = template_str
             send_email.apply_async(
                 kwargs={
@@ -517,8 +524,10 @@ class WorkflowService:
         self._db.add(log_entry)
         await self._db.flush()
 
-        # Re-fetch updated instance for response
+        # Re-fetch updated instance for response — guaranteed present, we
+        # just wrote to this row in the same transaction above.
         refreshed = await self._db.get(WorkflowInstance, instance_id)
+        assert refreshed is not None
 
         await self._activate_chain_for_state(instance_id, new_state, states)
 
@@ -533,11 +542,13 @@ class WorkflowService:
         if is_terminal:
             workflow_instances_active.dec()
 
-        logger.info("workflow_transition_executed",
-                    instance_id=str(instance_id),
-                    from_state=captured_state,
-                    to_state=new_state,
-                    duration_ms=duration_ms)
+        logger.info(
+            "workflow_transition_executed",
+            instance_id=str(instance_id),
+            from_state=captured_state,
+            to_state=new_state,
+            duration_ms=duration_ms,
+        )
 
         self._dispatch_side_effects(refreshed, tr_result.notifications, tr_result.webhooks)
 
@@ -564,8 +575,7 @@ class WorkflowService:
     ) -> list[WorkflowInstanceRead]:
         stmt = (
             select(WorkflowInstance)
-            .where(WorkflowInstance.workflow_id == workflow_id,
-                   WorkflowInstance.app_id == app_id)
+            .where(WorkflowInstance.workflow_id == workflow_id, WorkflowInstance.app_id == app_id)
             .order_by(WorkflowInstance.started_at.desc())
             .limit(limit)
         )
@@ -613,8 +623,12 @@ class WorkflowService:
         await self._db.flush()
 
         workflow_instances_active.dec()
-        logger.info("workflow_instance_cancelled", instance_id=str(instance_id),
-                    actor_id=str(actor_id), reason=reason)
+        logger.info(
+            "workflow_instance_cancelled",
+            instance_id=str(instance_id),
+            actor_id=str(actor_id),
+            reason=reason,
+        )
 
         refreshed = await self._db.get(WorkflowInstance, instance_id)
         return WorkflowInstanceRead.model_validate(refreshed)
@@ -634,7 +648,7 @@ class WorkflowService:
         for c in chains:
             levels = await self._load_chain_levels(c.id)
             read = ApprovalChainDefRead.model_validate(c)
-            read.levels = [ApprovalLevelDefRead.model_validate(l) for l in levels]
+            read.levels = [ApprovalLevelDefRead.model_validate(lvl) for lvl in levels]
             out.append(read)
         return out
 
@@ -652,7 +666,7 @@ class WorkflowService:
         await self._db.flush()
         levels = await self._replace_chain_levels(chain.id, data.levels)
         read = ApprovalChainDefRead.model_validate(chain)
-        read.levels = [ApprovalLevelDefRead.model_validate(l) for l in levels]
+        read.levels = [ApprovalLevelDefRead.model_validate(lvl) for lvl in levels]
         return read
 
     async def update_approval_chain(
@@ -672,7 +686,7 @@ class WorkflowService:
         await self._db.flush()
         levels = await self._load_chain_levels(chain.id)
         read = ApprovalChainDefRead.model_validate(chain)
-        read.levels = [ApprovalLevelDefRead.model_validate(l) for l in levels]
+        read.levels = [ApprovalLevelDefRead.model_validate(lvl) for lvl in levels]
         return read
 
     async def delete_approval_chain(self, workflow_id: uuid.UUID, chain_id: uuid.UUID) -> None:
@@ -708,7 +722,7 @@ class WorkflowService:
 
         chain_def = await self._db.get(ApprovalChainDef, ci.chain_def_id)
         levels = await self._load_chain_levels(ci.chain_def_id)
-        max_level = max((l.level_order for l in levels), default=1)
+        max_level = max((lvl.level_order for lvl in levels), default=1)
 
         response = ApprovalLevelResponse(
             chain_instance_id=ci.id,
@@ -745,7 +759,7 @@ class WorkflowService:
                 await self._db.flush()
                 # update assignee on workflow instance to next level
                 next_level = next(
-                    (l for l in levels if l.level_order == ci.current_level), None
+                    (lvl for lvl in levels if lvl.level_order == ci.current_level), None
                 )
                 if next_level:
                     user_id, group_id = self._resolve_level_assignee(next_level)
@@ -789,12 +803,14 @@ class WorkflowService:
         for tr in spec.get_transitions_from(instance.current_state):
             if tr.required_roles and not any(r in actor_roles for r in tr.required_roles):
                 continue
-            available.append(AvailableTransitionRead(
-                name=tr.name,
-                display_name=tr.display_name,
-                to_state=tr.to_state,
-                requires_roles=tr.required_roles,
-            ))
+            available.append(
+                AvailableTransitionRead(
+                    name=tr.name,
+                    display_name=tr.display_name,
+                    to_state=tr.to_state,
+                    requires_roles=tr.required_roles,
+                )
+            )
         return available
 
     # ==============================================================
@@ -820,22 +836,16 @@ class WorkflowService:
 
     async def _fetch_workflow(self, app_id: uuid.UUID, workflow_id: uuid.UUID) -> WorkflowDef:
         result = await self._db.execute(
-            select(WorkflowDef).where(
-                WorkflowDef.id == workflow_id, WorkflowDef.app_id == app_id
-            )
+            select(WorkflowDef).where(WorkflowDef.id == workflow_id, WorkflowDef.app_id == app_id)
         )
         wf = result.scalar_one_or_none()
         if wf is None:
             raise WorkflowNotFoundError(str(workflow_id))
         return wf
 
-    async def _fetch_state(
-        self, workflow_id: uuid.UUID, state_id: uuid.UUID
-    ) -> StateDef:
+    async def _fetch_state(self, workflow_id: uuid.UUID, state_id: uuid.UUID) -> StateDef:
         result = await self._db.execute(
-            select(StateDef).where(
-                StateDef.id == state_id, StateDef.workflow_id == workflow_id
-            )
+            select(StateDef).where(StateDef.id == state_id, StateDef.workflow_id == workflow_id)
         )
         state = result.scalar_one_or_none()
         if state is None:
@@ -893,7 +903,7 @@ class WorkflowService:
             return
 
         levels = await self._load_chain_levels(state_def.approval_chain_id)
-        first_level = next((l for l in levels if l.level_order == 1), None)
+        first_level = next((lvl for lvl in levels if lvl.level_order == 1), None)
 
         ci = ApprovalChainInstance(
             chain_def_id=state_def.approval_chain_id,
@@ -924,13 +934,19 @@ class WorkflowService:
             return
         _, transitions = await self._load_fsm_data(instance.workflow_id)
         tr_def = next(
-            (t for t in transitions
-             if t.from_state == instance.current_state and t.name == transition_name),
+            (
+                t
+                for t in transitions
+                if t.from_state == instance.current_state and t.name == transition_name
+            ),
             None,
         )
         if tr_def is None:
-            logger.warning("auto_fire_transition_not_found",
-                           transition=transition_name, state=instance.current_state)
+            logger.warning(
+                "auto_fire_transition_not_found",
+                transition=transition_name,
+                state=instance.current_state,
+            )
             return
         req = TransitionRequest(transition_name=transition_name, record_payload={})
         try:
@@ -943,12 +959,11 @@ class WorkflowService:
                 actor_roles=list(tr_def.required_roles or []),
             )
         except (WorkflowTransitionError, WorkflowConcurrentModificationError) as exc:
-            logger.warning("auto_fire_transition_failed", error=str(exc),
-                           transition=transition_name)
+            logger.warning(
+                "auto_fire_transition_failed", error=str(exc), transition=transition_name
+            )
 
-    async def _fetch_chain(
-        self, workflow_id: uuid.UUID, chain_id: uuid.UUID
-    ) -> ApprovalChainDef:
+    async def _fetch_chain(self, workflow_id: uuid.UUID, chain_id: uuid.UUID) -> ApprovalChainDef:
         res = await self._db.execute(
             select(ApprovalChainDef).where(
                 ApprovalChainDef.id == chain_id,
@@ -960,9 +975,7 @@ class WorkflowService:
             raise WorkflowNotFoundError(f"Approval chain {chain_id} not found")
         return chain
 
-    async def _fetch_chain_instance(
-        self, chain_instance_id: uuid.UUID
-    ) -> ApprovalChainInstance:
+    async def _fetch_chain_instance(self, chain_instance_id: uuid.UUID) -> ApprovalChainInstance:
         ci = await self._db.get(ApprovalChainInstance, chain_instance_id)
         if ci is None:
             raise WorkflowNotFoundError(f"Approval chain instance {chain_instance_id} not found")
@@ -1050,6 +1063,7 @@ class WorkflowService:
     @staticmethod
     def _schedule_sla_check(instance: WorkflowInstance, expected_state: str) -> None:
         from app.worker.tasks.workflow import check_sla_breach
+
         if instance.sla_deadline is None:
             return
         check_sla_breach.apply_async(

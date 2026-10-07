@@ -2,6 +2,7 @@
 RBAC endpoints: custom role CRUD, resource permissions, ABAC rules.
 All mutations require platform_admin.
 """
+
 import uuid
 
 import structlog
@@ -18,7 +19,6 @@ from app.schemas.security import (
 from app.schemas.users import RoleCreate, RoleRead, RoleUpdate
 from app.services.abac import AbacConditionError
 from app.services.roles import (
-    RoleConflictError,
     RoleNotFoundError,
     RolePermissionError,
     RoleService,
@@ -35,10 +35,13 @@ def _require_platform_admin(current_user: AuthDep) -> None:
 
 # ── Role CRUD ───────────────────────────────────────────────────────────────
 
+
 @router.get("/roles", response_model=list[RoleRead], summary="List all roles")
 async def list_roles(current_user: AuthDep, db: DbDep) -> list[RoleRead]:
     if not current_user.has_role("platform_admin", "org_admin", "auditor"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
     actor_org_id = None if current_user.has_role("platform_admin") else current_user.org_id
     return await RoleService(db).list_roles(actor_org_id=actor_org_id)
 
@@ -51,7 +54,9 @@ async def list_roles(current_user: AuthDep, db: DbDep) -> list[RoleRead]:
 )
 async def create_role(body: RoleCreate, current_user: AuthDep, db: DbDep) -> RoleRead:
     if not current_user.has_role("platform_admin", "org_admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
     org_id = None if current_user.has_role("platform_admin") else current_user.org_id
     return await RoleService(db).create_role(
         body,
@@ -62,9 +67,7 @@ async def create_role(body: RoleCreate, current_user: AuthDep, db: DbDep) -> Rol
 
 
 @router.patch("/roles/{role_id}", response_model=RoleRead, summary="Update a custom role")
-async def update_role(
-    role_id: str, body: RoleUpdate, current_user: AuthDep, db: DbDep
-) -> RoleRead:
+async def update_role(role_id: str, body: RoleUpdate, current_user: AuthDep, db: DbDep) -> RoleRead:
     _require_platform_admin(current_user)
     try:
         return await RoleService(db).update_role(
@@ -86,7 +89,9 @@ async def update_role(
 )
 async def delete_role(role_id: str, current_user: AuthDep, db: DbDep) -> None:
     if not current_user.has_role("platform_admin", "org_admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
     actor_org_id = None if current_user.has_role("platform_admin") else current_user.org_id
     try:
         await RoleService(db).delete_role(
@@ -103,6 +108,7 @@ async def delete_role(role_id: str, current_user: AuthDep, db: DbDep) -> None:
 
 # ── Resource permissions ────────────────────────────────────────────────────
 
+
 @router.get(
     "/roles/{role_id}/permissions",
     response_model=list[ResourcePermissionRead],
@@ -112,7 +118,9 @@ async def list_role_permissions(
     role_id: str, current_user: AuthDep, db: DbDep
 ) -> list[ResourcePermissionRead]:
     if not current_user.has_role("platform_admin", "org_admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
     return await RoleService(db).list_resource_permissions(role_id=role_id)
 
 
@@ -128,7 +136,9 @@ async def replace_role_permissions(
     db: DbDep,
 ) -> list[ResourcePermissionRead]:
     if not current_user.has_role("platform_admin", "org_admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
     svc = RoleService(db)
     if current_user.has_role("org_admin") and not current_user.has_role("platform_admin"):
         try:
@@ -136,7 +146,10 @@ async def replace_role_permissions(
         except RoleNotFoundError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
         if role.org_id != current_user.org_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify permissions for role from another organisation")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot modify permissions for role from another organisation",
+            )
     return await svc.bulk_upsert_resource_permissions(
         role_id,
         body,
@@ -146,6 +159,7 @@ async def replace_role_permissions(
 
 
 # ── ABAC rules ──────────────────────────────────────────────────────────────
+
 
 @router.get(
     "/abac-rules",
@@ -158,7 +172,9 @@ async def list_abac_rules(
     role_id: str | None = Query(default=None),
 ) -> list[AbacRuleRead]:
     if not current_user.has_role("platform_admin", "org_admin", "auditor"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
     return await RoleService(db).list_abac_rules(role_id=role_id)
 
 
@@ -181,7 +197,9 @@ async def create_abac_rule(
             actor_email=getattr(current_user, "email", None),
         )
     except AbacConditionError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
 
 @router.patch(
@@ -206,7 +224,9 @@ async def update_abac_rule(
     except RoleNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except AbacConditionError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
 
 @router.delete(

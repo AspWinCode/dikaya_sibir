@@ -1,13 +1,13 @@
 """FileService: upload → scan → S3 → DB."""
+
 import uuid
-from datetime import UTC, datetime
 
 import structlog
 from fastapi import UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.antivirus import AntivirusError, ClamAVClient
+from app.core.antivirus import ClamAVClient
 from app.core.config import settings
 from app.core.metrics import file_uploads
 from app.core.storage import S3Storage
@@ -25,7 +25,7 @@ class FileError(Exception):
         super().__init__(detail)
 
 
-class FileNotFoundError(Exception):
+class RecordFileNotFoundError(Exception):
     pass
 
 
@@ -107,9 +107,13 @@ class FileService:
         effective_max = policy.max_files_per_record
         if max_files is not None:
             effective_max = min(max_files, effective_max)
-        count_stmt = select(func.count()).select_from(RecordFile).where(
-            RecordFile.record_id == record_id,
-            RecordFile.is_latest.is_(True),
+        count_stmt = (
+            select(func.count())
+            .select_from(RecordFile)
+            .where(
+                RecordFile.record_id == record_id,
+                RecordFile.is_latest.is_(True),
+            )
         )
         if previous is not None:
             count_stmt = count_stmt.where(RecordFile.id != previous.id)
@@ -161,9 +165,7 @@ class FileService:
         )
         return RecordFileRead.model_validate(db_file)
 
-    async def get_download_url(
-        self, file_id: uuid.UUID, expires: int = 3600
-    ) -> RecordFileRead:
+    async def get_download_url(self, file_id: uuid.UUID, expires: int = 3600) -> RecordFileRead:
         db_file = await self._fetch(file_id)
         url = await self._storage.get_presigned_url(
             settings.S3_BUCKET_FILES,
@@ -232,7 +234,7 @@ class FileService:
         # Remove from S3
         try:
             await self._storage.delete(settings.S3_BUCKET_FILES, db_file.s3_key)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("s3_delete_failed", key=db_file.s3_key, error=str(exc))
 
         await self._db.delete(db_file)
@@ -240,10 +242,8 @@ class FileService:
         logger.info("file_deleted", file_id=str(file_id))
 
     async def _fetch(self, file_id: uuid.UUID) -> RecordFile:
-        result = await self._db.execute(
-            select(RecordFile).where(RecordFile.id == file_id)
-        )
+        result = await self._db.execute(select(RecordFile).where(RecordFile.id == file_id))
         f = result.scalar_one_or_none()
         if f is None:
-            raise FileNotFoundError(str(file_id))
+            raise RecordFileNotFoundError(str(file_id))
         return f

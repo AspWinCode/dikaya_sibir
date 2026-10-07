@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -11,8 +12,9 @@ class WorkflowDef(Base):
     __tablename__ = "workflow_def"
     __table_args__ = {"schema": "workflow"}
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
-                                           server_default=sa.text("gen_random_uuid()"))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")
+    )
     app_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     name: Mapped[str] = mapped_column(sa.String(256), nullable=False)
@@ -20,10 +22,12 @@ class WorkflowDef(Base):
     initial_state: Mapped[str] = mapped_column(sa.String(128), nullable=False)
     is_active: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default="false")
     version: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="1")
-    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False,
-                                                     server_default=sa.text("now()"))
-    updated_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False,
-                                                     server_default=sa.text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+    )
 
 
 class StateDef(Base):
@@ -33,8 +37,9 @@ class StateDef(Base):
         {"schema": "workflow"},
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
-                                           server_default=sa.text("gen_random_uuid()"))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")
+    )
     workflow_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         sa.ForeignKey("workflow.workflow_def.id", ondelete="CASCADE"),
@@ -60,13 +65,15 @@ class StateDef(Base):
 class TransitionDef(Base):
     __tablename__ = "transition_def"
     __table_args__ = (
-        sa.UniqueConstraint("workflow_id", "from_state", "name",
-                            name="uq_transition_def_wf_from_name"),
+        sa.UniqueConstraint(
+            "workflow_id", "from_state", "name", name="uq_transition_def_wf_from_name"
+        ),
         {"schema": "workflow"},
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
-                                           server_default=sa.text("gen_random_uuid()"))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")
+    )
     workflow_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         sa.ForeignKey("workflow.workflow_def.id", ondelete="CASCADE"),
@@ -89,8 +96,9 @@ class WorkflowInstance(Base):
         {"schema": "workflow"},
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
-                                           server_default=sa.text("gen_random_uuid()"))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")
+    )
     workflow_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         sa.ForeignKey("workflow.workflow_def.id"),
@@ -101,10 +109,11 @@ class WorkflowInstance(Base):
     record_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     current_state: Mapped[str] = mapped_column(sa.String(128), nullable=False)
     version: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="1")
-    sla_deadline: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True))
-    started_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False,
-                                                     server_default=sa.text("now()"))
-    completed_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True))
+    sla_deadline: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    started_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     assigned_group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     escalation_level: Mapped[int | None] = mapped_column(sa.Integer)
@@ -114,8 +123,9 @@ class ApprovalChainDef(Base):
     __tablename__ = "approval_chain_def"
     __table_args__ = {"schema": "workflow"}
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
-                                           server_default=sa.text("gen_random_uuid()"))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")
+    )
     workflow_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         sa.ForeignKey("workflow.workflow_def.id", ondelete="CASCADE"),
@@ -125,8 +135,9 @@ class ApprovalChainDef(Base):
     description: Mapped[str | None] = mapped_column(sa.Text)
     on_approve_transition: Mapped[str | None] = mapped_column(sa.String(128))
     on_reject_transition: Mapped[str | None] = mapped_column(sa.String(128))
-    created_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False,
-                                                     server_default=sa.text("now()"))
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+    )
 
 
 class ApprovalLevelDef(Base):
@@ -136,8 +147,9 @@ class ApprovalLevelDef(Base):
         {"schema": "workflow"},
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
-                                           server_default=sa.text("gen_random_uuid()"))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")
+    )
     chain_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         sa.ForeignKey("workflow.approval_chain_def.id", ondelete="CASCADE"),
@@ -153,8 +165,9 @@ class ApprovalChainInstance(Base):
     __tablename__ = "approval_chain_instance"
     __table_args__ = {"schema": "workflow"}
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
-                                           server_default=sa.text("gen_random_uuid()"))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")
+    )
     chain_def_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     workflow_instance_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -163,17 +176,19 @@ class ApprovalChainInstance(Base):
     )
     current_level: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="1")
     status: Mapped[str] = mapped_column(sa.String(32), nullable=False, server_default="'pending'")
-    started_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False,
-                                                     server_default=sa.text("now()"))
-    completed_at: Mapped[sa.DateTime | None] = mapped_column(sa.DateTime(timezone=True))
+    started_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
 
 
 class ApprovalLevelResponse(Base):
     __tablename__ = "approval_level_response"
     __table_args__ = {"schema": "workflow"}
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
-                                           server_default=sa.text("gen_random_uuid()"))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")
+    )
     chain_instance_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         sa.ForeignKey("workflow.approval_chain_instance.id", ondelete="CASCADE"),
@@ -183,16 +198,18 @@ class ApprovalLevelResponse(Base):
     actor_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     decision: Mapped[str] = mapped_column(sa.String(16), nullable=False)
     comment: Mapped[str | None] = mapped_column(sa.Text)
-    decided_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False,
-                                                     server_default=sa.text("now()"))
+    decided_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+    )
 
 
 class TransitionLog(Base):
     __tablename__ = "transition_log"
     __table_args__ = {"schema": "workflow"}
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
-                                           server_default=sa.text("gen_random_uuid()"))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")
+    )
     instance_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         sa.ForeignKey("workflow.workflow_instance.id", ondelete="CASCADE"),
@@ -203,7 +220,8 @@ class TransitionLog(Base):
     to_state: Mapped[str] = mapped_column(sa.String(128), nullable=False)
     transition_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     actor_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
-    executed_at: Mapped[sa.DateTime] = mapped_column(sa.DateTime(timezone=True), nullable=False,
-                                                      server_default=sa.text("now()"))
+    executed_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+    )
     duration_ms: Mapped[int | None] = mapped_column(sa.Integer)
     error: Mapped[str | None] = mapped_column(sa.Text)

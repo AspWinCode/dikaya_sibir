@@ -1,14 +1,15 @@
 """Workflow Engine Pydantic schemas."""
+
 import uuid
 from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 # ------------------------------------------------------------------
 # WorkflowDef
 # ------------------------------------------------------------------
+
 
 class WorkflowDefRead(BaseModel):
     id: uuid.UUID
@@ -44,6 +45,7 @@ class WorkflowDefUpdate(BaseModel):
 # ------------------------------------------------------------------
 # ApprovalChain
 # ------------------------------------------------------------------
+
 
 class ApprovalLevelDefRead(BaseModel):
     id: uuid.UUID
@@ -125,6 +127,7 @@ ApprovalChainInstanceRead.model_rebuild()
 # StateDef
 # ------------------------------------------------------------------
 
+
 class StateDefRead(BaseModel):
     id: uuid.UUID
     workflow_id: uuid.UUID
@@ -144,9 +147,12 @@ class StateDefRead(BaseModel):
 
 
 class StateDefCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=128,
-                      pattern=r"^[a-z0-9_]+$",
-                      description="Machine name: lowercase, digits, underscores")
+    name: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^[a-z0-9_]+$",
+        description="Machine name: lowercase, digits, underscores",
+    )
     display_name: str = Field(min_length=1, max_length=256)
     is_terminal: bool = False
     sla_seconds: int | None = Field(default=None, ge=1)
@@ -178,6 +184,7 @@ class StateDefUpdate(BaseModel):
 # TransitionDef
 # ------------------------------------------------------------------
 
+
 class TransitionDefRead(BaseModel):
     id: uuid.UUID
     workflow_id: uuid.UUID
@@ -193,8 +200,7 @@ class TransitionDefRead(BaseModel):
 
 
 class TransitionDefCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=128,
-                      pattern=r"^[a-z0-9_]+$")
+    name: str = Field(min_length=1, max_length=128, pattern=r"^[a-z0-9_]+$")
     display_name: str = Field(min_length=1, max_length=256)
     from_state: str = Field(min_length=1, max_length=128)
     to_state: str = Field(min_length=1, max_length=128)
@@ -216,6 +222,7 @@ class TransitionDefUpdate(BaseModel):
 # ------------------------------------------------------------------
 # WorkflowInstance
 # ------------------------------------------------------------------
+
 
 class WorkflowInstanceRead(BaseModel):
     id: uuid.UUID
@@ -248,8 +255,10 @@ class StartInstanceRequest(BaseModel):
 # Transition execution
 # ------------------------------------------------------------------
 
+
 class TransitionRequest(BaseModel):
     """Execute a named transition on a workflow instance."""
+
     transition_name: str = Field(min_length=1, max_length=128)
     record_payload: dict[str, Any] = Field(
         default_factory=dict,
@@ -269,6 +278,7 @@ class TransitionResponse(BaseModel):
 # TransitionLog
 # ------------------------------------------------------------------
 
+
 class TransitionLogRead(BaseModel):
     id: uuid.UUID
     instance_id: uuid.UUID
@@ -285,6 +295,7 @@ class TransitionLogRead(BaseModel):
 # ------------------------------------------------------------------
 # Available transitions response
 # ------------------------------------------------------------------
+
 
 class AvailableTransitionRead(BaseModel):
     name: str

@@ -1,4 +1,5 @@
 """Shareable app invite links: create/revoke, preview, accept, sign up via link."""
+
 import hashlib
 import secrets
 import uuid
@@ -71,7 +72,9 @@ class InviteService:
             allow_signup=data.allow_signup,
             max_uses=data.max_uses,
             use_count=0,
-            expires_at=_now() + timedelta(days=data.expires_in_days) if data.expires_in_days else None,
+            expires_at=_now() + timedelta(days=data.expires_in_days)
+            if data.expires_in_days
+            else None,
             created_by=actor_id,
         )
         self._db.add(link)
@@ -95,19 +98,22 @@ class InviteService:
                 AppInviteLink.app_id == app_id,
                 AppInviteLink.revoked_at.is_(None),
                 or_(AppInviteLink.expires_at.is_(None), AppInviteLink.expires_at > _now()),
-                or_(AppInviteLink.max_uses.is_(None), AppInviteLink.use_count < AppInviteLink.max_uses),
+                or_(
+                    AppInviteLink.max_uses.is_(None),
+                    AppInviteLink.use_count < AppInviteLink.max_uses,
+                ),
             )
             .order_by(AppInviteLink.created_at.desc())
         )
         return [InviteLinkRead.model_validate(r) for r in rows.scalars().all()]
 
-    async def revoke_link(
-        self, app_id: uuid.UUID, link_id: uuid.UUID, actor_id: uuid.UUID
-    ) -> None:
+    async def revoke_link(self, app_id: uuid.UUID, link_id: uuid.UUID, actor_id: uuid.UUID) -> None:
         await self._require_manager(app_id, actor_id)
         link = (
             await self._db.execute(
-                select(AppInviteLink).where(AppInviteLink.id == link_id, AppInviteLink.app_id == app_id)
+                select(AppInviteLink).where(
+                    AppInviteLink.id == link_id, AppInviteLink.app_id == app_id
+                )
             )
         ).scalar_one_or_none()
         if link is None or link.revoked_at is not None:
@@ -161,7 +167,10 @@ class InviteService:
             update(AppInviteLink)
             .where(
                 AppInviteLink.id == link.id,
-                or_(AppInviteLink.max_uses.is_(None), AppInviteLink.use_count < AppInviteLink.max_uses),
+                or_(
+                    AppInviteLink.max_uses.is_(None),
+                    AppInviteLink.use_count < AppInviteLink.max_uses,
+                ),
             )
             .values(use_count=AppInviteLink.use_count + 1)
             .returning(AppInviteLink.id)
@@ -173,19 +182,25 @@ class InviteService:
         """Add membership; returns False when the user was already a member."""
         existing = (
             await self._db.execute(
-                select(AppMember).where(AppMember.app_id == link.app_id, AppMember.user_id == user_id)
+                select(AppMember).where(
+                    AppMember.app_id == link.app_id, AppMember.user_id == user_id
+                )
             )
         ).scalar_one_or_none()
         if existing is not None:
             return False
         await self._consume(link)
         self._db.add(
-            AppMember(app_id=link.app_id, user_id=user_id, role=link.role, granted_by=link.created_by)
+            AppMember(
+                app_id=link.app_id, user_id=user_id, role=link.role, granted_by=link.created_by
+            )
         )
         await self._db.flush()
         return True
 
-    async def accept(self, token: str, user_id: uuid.UUID, actor_email: str | None = None) -> InviteAcceptResult:
+    async def accept(
+        self, token: str, user_id: uuid.UUID, actor_email: str | None = None
+    ) -> InviteAcceptResult:
         link, app = await self._get_valid(token)
         added = await self._grant(link, user_id)
         if added:

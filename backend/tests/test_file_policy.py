@@ -3,17 +3,17 @@
 GET/PUT /auth/file-policy only touch the DB (no S3/ClamAV), so — unlike
 test_files.py — these run as real HTTP integration tests.
 """
+
 import uuid
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
 from app.schemas.auth import FilePolicyUpdate
 from app.services.file_policy import DEFAULT_ALLOWED_EXTENSIONS, FilePolicyService
 from app.services.files import FileError, FileService
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.test_files import FakeAntivirus, FakeStorage, FakeUploadFile
 
@@ -144,9 +144,7 @@ async def test_update_file_policy_rejects_empty_extension_list(
 
 
 @pytest.mark.asyncio
-async def test_update_file_policy_normalizes_extensions(
-    client: AsyncClient, admin: User
-) -> None:
+async def test_update_file_policy_normalizes_extensions(client: AsyncClient, admin: User) -> None:
     token = await _login(client, "filepolicy_admin@example.com", "Admin1234!")
     r = await client.put(
         "/api/v1/auth/file-policy",
@@ -170,7 +168,9 @@ async def test_file_service_uses_custom_max_size(db_session: AsyncSession) -> No
 
     oversized = b"x" * (2 * 1024 * 1024)  # 2 MB > custom 1 MB cap
     with pytest.raises(FileError) as exc_info:
-        await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", oversized))
+        await svc.upload_file(
+            app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", oversized)
+        )
     assert "1 MB" in exc_info.value.detail
 
 
@@ -182,7 +182,9 @@ async def test_file_service_allows_extension_added_by_admin(db_session: AsyncSes
     svc = FileService(db_session, FakeStorage(), FakeAntivirus())
     app_id, entity_id, record_id = _ids()
 
-    result = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("clip.mp4", b"data"))
+    result = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("clip.mp4", b"data")
+    )
     assert result.original_filename == "clip.mp4"
 
 
@@ -196,7 +198,9 @@ async def test_file_service_enforces_max_files_per_record(db_session: AsyncSessi
     await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("b.pdf", b"b"))
 
     with pytest.raises(FileError) as exc_info:
-        await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("c.pdf", b"c"))
+        await svc.upload_file(
+            app_id, entity_id, record_id, "attachment", FakeUploadFile("c.pdf", b"c")
+        )
     assert "maximum of 2 files" in exc_info.value.detail
 
 
@@ -208,7 +212,9 @@ async def test_replace_at_the_ceiling_does_not_trip_the_limit(db_session: AsyncS
     svc = FileService(db_session, FakeStorage(), FakeAntivirus())
     app_id, entity_id, record_id = _ids()
 
-    await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("a.pdf", b"a"), replace=True)
+    await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("a.pdf", b"a"), replace=True
+    )
     # Should not raise even though the record already has 1 file (== ceiling).
     result = await svc.upload_file(
         app_id, entity_id, record_id, "attachment", FakeUploadFile("a2.pdf", b"a2"), replace=True
@@ -224,11 +230,17 @@ async def test_max_files_override_can_only_tighten_not_loosen(db_session: AsyncS
     svc = FileService(db_session, FakeStorage(), FakeAntivirus())
     app_id, entity_id, record_id = _ids()
 
-    await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("a.pdf", b"a"), max_files=10)
-    await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("b.pdf", b"b"), max_files=10)
+    await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("a.pdf", b"a"), max_files=10
+    )
+    await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("b.pdf", b"b"), max_files=10
+    )
 
     with pytest.raises(FileError):
-        await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("c.pdf", b"c"), max_files=10)
+        await svc.upload_file(
+            app_id, entity_id, record_id, "attachment", FakeUploadFile("c.pdf", b"c"), max_files=10
+        )
 
 
 @pytest.mark.asyncio
@@ -239,8 +251,12 @@ async def test_max_files_override_can_tighten_below_ceiling(db_session: AsyncSes
     svc = FileService(db_session, FakeStorage(), FakeAntivirus())
     app_id, entity_id, record_id = _ids()
 
-    await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("a.pdf", b"a"), max_files=1)
+    await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("a.pdf", b"a"), max_files=1
+    )
 
     with pytest.raises(FileError) as exc_info:
-        await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("b.pdf", b"b"), max_files=1)
+        await svc.upload_file(
+            app_id, entity_id, record_id, "attachment", FakeUploadFile("b.pdf", b"b"), max_files=1
+        )
     assert "maximum of 1 files" in exc_info.value.detail

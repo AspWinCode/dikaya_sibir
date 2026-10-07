@@ -15,14 +15,13 @@ class Record(Base):
     Table is HASH-partitioned by entity_id (8 partitions) — defined in migration,
     not via ORM. SQLAlchemy queries against the parent table; PG routes to partition.
     """
+
     __tablename__ = "record"
     __table_args__ = {"schema": "data"}
 
     # Composite PK matches PARTITION BY HASH (entity_id)
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -47,15 +46,14 @@ class Sequence(Base):
         {prefix}{zero_padded_value}{suffix}
     e.g. prefix="ORD-", padding=5, next_value=42 → "ORD-00042"
     """
+
     __tablename__ = "sequence"
     __table_args__ = (
         sa.UniqueConstraint("entity_id", "field_name", name="uq_sequence_entity_field"),
         {"schema": "data"},
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     app_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     field_name: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -72,12 +70,11 @@ class Sequence(Base):
 
 class RecordFile(Base):
     """File attachment linked to a record field."""
+
     __tablename__ = "record_file"
     __table_args__ = {"schema": "data"}
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     record_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     app_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)

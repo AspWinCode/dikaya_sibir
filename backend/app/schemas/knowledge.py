@@ -1,4 +1,5 @@
 """Knowledge base schemas (ТЗ 3.12)."""
+
 import re
 import uuid
 from datetime import datetime
@@ -29,6 +30,7 @@ class ArticleRead(BaseModel):
 
 class ArticleListItem(BaseModel):
     """Lighter shape for list/search results — excerpt instead of full content."""
+
     id: uuid.UUID
     slug: str
     title: str
@@ -42,7 +44,9 @@ class ArticleListItem(BaseModel):
 
 class ArticleCreate(BaseModel):
     title: str = Field(min_length=1, max_length=256)
-    slug: str | None = Field(default=None, min_length=1, max_length=200, pattern=r"^[a-z0-9][a-z0-9-]*$")
+    slug: str | None = Field(
+        default=None, min_length=1, max_length=200, pattern=r"^[a-z0-9][a-z0-9-]*$"
+    )
     category: str | None = Field(default=None, max_length=128)
     display_order: int = 0
     content: str = Field(default="", max_length=200_000)

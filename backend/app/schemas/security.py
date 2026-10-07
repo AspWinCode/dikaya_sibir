@@ -1,4 +1,5 @@
 """Security schemas: field-level ABAC, resource permissions, ABAC rules."""
+
 import uuid
 from datetime import datetime
 from typing import Any
@@ -20,6 +21,7 @@ class FieldPermissionRead(BaseModel):
 
 class FieldPermissionUpsert(BaseModel):
     """Create or replace a field permission for one (field_name, role_id) pair."""
+
     field_name: str = Field(min_length=1, max_length=128)
     role_id: str = Field(min_length=1, max_length=128)
     can_read: bool = True
@@ -28,17 +30,20 @@ class FieldPermissionUpsert(BaseModel):
 
 class FieldPermissionBulkUpsert(BaseModel):
     """Full replacement of all field permissions for one entity."""
+
     permissions: list[FieldPermissionUpsert] = Field(max_length=500)
 
 
 class FieldRestrictionsResponse(BaseModel):
     """Result of an ABAC check for a given caller + entity."""
+
     entity_id: uuid.UUID
-    denied_read: list[str]   # field names the caller cannot read
+    denied_read: list[str]  # field names the caller cannot read
     denied_write: list[str]  # field names the caller cannot write
 
 
 # ── Resource permissions ────────────────────────────────────────────────────
+
 
 class ResourcePermissionRead(BaseModel):
     id: uuid.UUID
@@ -53,6 +58,7 @@ class ResourcePermissionRead(BaseModel):
 
 class ResourcePermissionUpsert(BaseModel):
     """Create or replace a single resource permission."""
+
     role_id: str = Field(min_length=1, max_length=64)
     resource_type: str = Field(min_length=1, max_length=32)
     resource_id: str = Field(min_length=1, max_length=256)
@@ -62,10 +68,12 @@ class ResourcePermissionUpsert(BaseModel):
 
 class ResourcePermissionBulkUpsert(BaseModel):
     """Full replacement of all permissions for a given role."""
+
     permissions: list[ResourcePermissionUpsert] = Field(max_length=1000)
 
 
 # ── ABAC rules ──────────────────────────────────────────────────────────────
+
 
 class AbacRuleRead(BaseModel):
     id: uuid.UUID

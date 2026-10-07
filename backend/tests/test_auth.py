@@ -3,12 +3,12 @@
 These are integration tests — they require a running PostgreSQL (see conftest.py).
 Mark: pytest -m integration
 """
-import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
+import pytest
 from app.core.security import hash_password
 from app.models.identity import User
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.fixture()

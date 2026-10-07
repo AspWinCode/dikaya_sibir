@@ -13,7 +13,10 @@ logger = structlog.get_logger(__name__)
 
 PROTECTED_ROLES = {"platform_admin"}
 ORG_ASSIGNABLE_ROLES = {
-    "org_admin", "app_builder", "app_admin", "auditor",
+    "org_admin",
+    "app_builder",
+    "app_admin",
+    "auditor",
 }
 
 
@@ -55,9 +58,7 @@ class OrgService:
         if existing.scalar_one_or_none():
             raise OrgConflictError(f"Slug already taken: {data.slug}")
 
-        existing_user = await self._db.execute(
-            select(User).where(User.email == data.admin_email)
-        )
+        existing_user = await self._db.execute(select(User).where(User.email == data.admin_email))
         if existing_user.scalar_one_or_none():
             raise OrgConflictError(f"Email already registered: {data.admin_email}")
 
@@ -134,9 +135,7 @@ class OrgService:
             raise OrgPermissionError(f"Roles not assignable by org_admin: {forbidden}")
 
     async def _fetch(self, org_id: uuid.UUID) -> Organisation:
-        result = await self._db.execute(
-            select(Organisation).where(Organisation.id == org_id)
-        )
+        result = await self._db.execute(select(Organisation).where(Organisation.id == org_id))
         org = result.scalar_one_or_none()
         if org is None:
             raise OrgNotFoundError(str(org_id))

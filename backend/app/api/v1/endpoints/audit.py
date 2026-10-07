@@ -1,4 +1,5 @@
 """Audit log API — read-only access to the immutable action journal."""
+
 from __future__ import annotations
 
 import uuid
@@ -20,7 +21,9 @@ async def list_audit_logs(
     level: str | None = Query(default=None, description="Filter by level: info, warning, error"),
     action: str | None = Query(default=None, description="Filter by action name"),
     user_id: uuid.UUID | None = Query(default=None, description="Filter by actor user ID"),
-    since: datetime | None = Query(default=None, description="Return entries after this timestamp (ISO 8601)"),
+    since: datetime | None = Query(
+        default=None, description="Return entries after this timestamp (ISO 8601)"
+    ),
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> list[AuditLogRead]:

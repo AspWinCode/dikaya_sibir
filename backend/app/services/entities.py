@@ -23,9 +23,11 @@ logger = structlog.get_logger(__name__)
 
 
 def _reverse_relation_type(relation_type: str) -> str:
-    return {"one_to_one": "one_to_one", "one_to_many": "many_to_one", "many_to_many": "many_to_many"}.get(
-        relation_type, relation_type
-    )
+    return {
+        "one_to_one": "one_to_one",
+        "one_to_many": "many_to_one",
+        "many_to_many": "many_to_many",
+    }.get(relation_type, relation_type)
 
 
 class EntityNotFoundError(Exception):
@@ -285,9 +287,7 @@ class EntityService:
         entity = await self._fetch_entity(app_id, entity_id)
 
         # Validate all field ids belong to this entity
-        result = await self._db.execute(
-            select(Field.id).where(Field.entity_id == entity_id)
-        )
+        result = await self._db.execute(select(Field.id).where(Field.entity_id == entity_id))
         existing_ids = {str(r) for r in result.scalars()}
         incoming_ids = {str(fid) for fid in req.field_ids}
         if incoming_ids != existing_ids:
@@ -307,14 +307,10 @@ class EntityService:
     # Relations
     # ------------------------------------------------------------------
     async def list_relations(self, app_id: uuid.UUID) -> list[RelationRead]:
-        result = await self._db.execute(
-            select(Relation).where(Relation.app_id == app_id)
-        )
+        result = await self._db.execute(select(Relation).where(Relation.app_id == app_id))
         return [RelationRead.model_validate(r) for r in result.scalars()]
 
-    async def create_relation(
-        self, app_id: uuid.UUID, data: RelationCreate
-    ) -> RelationRead:
+    async def create_relation(self, app_id: uuid.UUID, data: RelationCreate) -> RelationRead:
         # Fetch both entities (validates they belong to this app)
         from_entity = await self._fetch_entity(app_id, data.from_entity_id)
         to_entity = await self._fetch_entity(app_id, data.to_entity_id)
@@ -413,7 +409,11 @@ class EntityService:
                 )
             )
             target_field = next(
-                (f for f in fields_result.scalars() if f.field_options.get("relation_id") == str(relation_id)),
+                (
+                    f
+                    for f in fields_result.scalars()
+                    if f.field_options.get("relation_id") == str(relation_id)
+                ),
                 None,
             )
             if target_field is None:
@@ -461,9 +461,7 @@ class EntityService:
                 )
                 entity = entity_result.scalar_one_or_none()
                 if entity:
-                    entity.field_order = [
-                        fid for fid in entity.field_order if fid != str(field.id)
-                    ]
+                    entity.field_order = [fid for fid in entity.field_order if fid != str(field.id)]
                 await self._db.delete(field)
         await self._db.flush()
         await self._db.delete(relation)
@@ -482,9 +480,7 @@ class EntityService:
     ) -> None:
         """Create (or skip if exists) a relation-type field on entity."""
         existing = await self._db.execute(
-            select(Field).where(
-                Field.entity_id == entity.id, Field.name == field_name
-            )
+            select(Field).where(Field.entity_id == entity.id, Field.name == field_name)
         )
         if existing.scalar_one_or_none() is not None:
             return

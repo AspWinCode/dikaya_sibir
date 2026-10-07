@@ -1,10 +1,12 @@
-import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+import contextlib
+import os
 
+import pytest
 from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.main import app
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # Disable rate limiting for the whole test session — the suite issues many
 # logins/requests in quick succession that would otherwise trip the 20/min auth
@@ -13,8 +15,6 @@ from app.main import app
 limiter.enabled = False
 
 # Use a separate test DB URL (set TEST_DATABASE_URL in env)
-import os
-
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
     "postgresql+asyncpg://app_user:app_pass@localhost:5433/nocode_test",
@@ -56,9 +56,7 @@ async def client(db_session: AsyncSession) -> AsyncClient:
         yield db_session
 
     app.dependency_overrides[get_db] = _override_get_db
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
 
@@ -72,8 +70,6 @@ async def client(db_session: AsyncSession) -> AsyncClient:
     import app.core.redis as _redis_module
 
     if _redis_module._redis is not None:
-        try:
+        with contextlib.suppress(Exception):
             await _redis_module._redis.aclose()
-        except Exception:
-            pass
         _redis_module._redis = None

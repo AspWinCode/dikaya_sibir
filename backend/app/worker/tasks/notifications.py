@@ -1,6 +1,7 @@
 import uuid
+
 import structlog
-from celery import shared_task
+from celery import Task, shared_task
 
 logger = structlog.get_logger(__name__)
 
@@ -12,7 +13,7 @@ logger = structlog.get_logger(__name__)
     default_retry_delay=30,
 )
 def deliver_rule_webhook(
-    self: object,
+    self: Task,
     app_id: str,
     entity_id: str,
     record_id: str | None,
@@ -30,6 +31,7 @@ def deliver_rule_webhook(
     since it is authored by an app builder, not a platform admin.
     """
     import asyncio
+
     from app.core.database import AsyncSessionLocal
     from app.core.http_client import send_webhook
     from app.models.logic import RuleWebhookDelivery
@@ -38,21 +40,27 @@ def deliver_rule_webhook(
 
     async def _log() -> None:
         async with AsyncSessionLocal() as session:
-            session.add(RuleWebhookDelivery(
-                app_id=uuid.UUID(app_id),
-                entity_id=uuid.UUID(entity_id),
-                record_id=uuid.UUID(record_id) if record_id else None,
-                execution_batch_id=uuid.UUID(execution_batch_id),
-                url=url,
-                method=method,
-                payload=payload,
-                status="delivered" if result.success else (
-                    "blocked" if result.error and result.error.startswith("Blocked:") else "failed"
-                ),
-                status_code=result.status_code,
-                error=result.error,
-                attempt_count=self.request.retries + 1,
-            ))
+            session.add(
+                RuleWebhookDelivery(
+                    app_id=uuid.UUID(app_id),
+                    entity_id=uuid.UUID(entity_id),
+                    record_id=uuid.UUID(record_id) if record_id else None,
+                    execution_batch_id=uuid.UUID(execution_batch_id),
+                    url=url,
+                    method=method,
+                    payload=payload,
+                    status="delivered"
+                    if result.success
+                    else (
+                        "blocked"
+                        if result.error and result.error.startswith("Blocked:")
+                        else "failed"
+                    ),
+                    status_code=result.status_code,
+                    error=result.error,
+                    attempt_count=self.request.retries + 1,
+                )
+            )
             await session.commit()
 
     asyncio.run(_log())
@@ -68,7 +76,7 @@ def deliver_rule_webhook(
     logger.warning("rule_webhook_failed", url=url, error=result.error, code=result.status_code)
     if self.request.retries < self.max_retries:
         raise self.retry(exc=Exception(result.error or f"HTTP {result.status_code}"))
-    return {"status": "exhausted", "error": result.error}
+    return {"status": "exhausted", "error": result.error or ""}
 
 
 @shared_task(
@@ -87,9 +95,11 @@ def send_email(
 ) -> dict[str, str]:
     """Send a transactional email via SMTP."""
     import asyncio
-    import aiosmtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
+
+    import aiosmtplib
+
     from app.core.config import settings
 
     msg = MIMEMultipart("alternative")
@@ -132,7 +142,9 @@ def send_workflow_notification(
 ) -> None:
     """Look up user email and send workflow event notification."""
     import asyncio
+
     from sqlalchemy import select
+
     from app.core.database import AsyncSessionLocal
     from app.models.identity import User
 
@@ -158,7 +170,9 @@ def send_workflow_notification(
     subject = f"{title}: {workflow_name}"
 
     state_row = f"<p>Состояние: <strong>{state}</strong></p>" if state else ""
-    record_row = f"<p>Запись ID: <code style='font-size:12px'>{record_id}</code></p>" if record_id else ""
+    record_row = (
+        f"<p>Запись ID: <code style='font-size:12px'>{record_id}</code></p>" if record_id else ""
+    )
 
     body_html = f"""
 <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#1a2340">
@@ -167,7 +181,9 @@ def send_workflow_notification(
   <p>Процесс: <strong>{workflow_name}</strong></p>
   {state_row}
   {record_row}
-  <p style="color:#888;margin-top:20px;font-size:13px">Войдите в систему для просмотра подробностей.</p>
+  <p style="color:#888;margin-top:20px;font-size:13px">
+    Войдите в систему для просмотра подробностей.
+  </p>
 </div>
 """
 

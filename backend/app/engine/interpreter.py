@@ -19,6 +19,7 @@ Action node schema:
 
 ExecutionResult holds the mutations; actual DB writes happen in RuleService.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -28,9 +29,24 @@ from typing import Any
 from app.engine.expressions import ExpressionError, evaluate
 
 _MAX_ACTIONS = 20
-_COMPARE_OPS = frozenset({"eq", "ne", "gt", "gte", "lt", "lte", "contains",
-                           "icontains", "in", "nin", "is_null", "is_not_null",
-                           "starts_with", "ends_with"})
+_COMPARE_OPS = frozenset(
+    {
+        "eq",
+        "ne",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "contains",
+        "icontains",
+        "in",
+        "nin",
+        "is_null",
+        "is_not_null",
+        "starts_with",
+        "ends_with",
+    }
+)
 
 
 class RuleError(Exception):
@@ -39,10 +55,10 @@ class RuleError(Exception):
 
 @dataclass
 class ExecutionContext:
-    record: dict[str, Any]          # current record payload
+    record: dict[str, Any]  # current record payload
     entity_id: uuid.UUID
     app_id: uuid.UUID
-    event: str                       # e.g. "record.updated"
+    event: str  # e.g. "record.updated"
     actor_id: uuid.UUID | None = None
     record_id: uuid.UUID | None = None  # ID of the triggering record
     changed_fields: list[str] = field(default_factory=list)
@@ -65,6 +81,7 @@ class ExecutionResult:
 # ------------------------------------------------------------------
 # Condition evaluation
 # ------------------------------------------------------------------
+
 
 def evaluate_conditions(node: dict[str, Any], ctx: ExecutionContext) -> bool:
     """Recursively evaluate a condition tree. Returns True if conditions pass."""
@@ -95,6 +112,8 @@ def _evaluate_compare(node: dict[str, Any], ctx: ExecutionContext) -> bool:
         raise RuleError(f"Unknown compare operator: {op!r}")
 
     field_name = node.get("field")
+    if not isinstance(field_name, str):
+        raise RuleError("compare condition requires a string 'field' name")
     actual = ctx.record.get(field_name)
 
     # value can be an expression node or a raw literal
@@ -104,16 +123,24 @@ def _evaluate_compare(node: dict[str, Any], ctx: ExecutionContext) -> bool:
     return _compare(actual, op, expected)
 
 
-def _compare(actual: Any, op: str, expected: Any) -> bool:  # noqa: PLR0911
+def _compare(actual: Any, op: str, expected: Any) -> bool:
     match op:
-        case "eq":           return actual == expected
-        case "ne":           return actual != expected
-        case "is_null":      return actual is None
-        case "is_not_null":  return actual is not None
-        case "contains":     return expected in str(actual or "")
-        case "icontains":    return expected.lower() in str(actual or "").lower()
-        case "starts_with":  return str(actual or "").startswith(str(expected or ""))
-        case "ends_with":    return str(actual or "").endswith(str(expected or ""))
+        case "eq":
+            return bool(actual == expected)
+        case "ne":
+            return bool(actual != expected)
+        case "is_null":
+            return actual is None
+        case "is_not_null":
+            return actual is not None
+        case "contains":
+            return expected in str(actual or "")
+        case "icontains":
+            return expected.lower() in str(actual or "").lower()
+        case "starts_with":
+            return str(actual or "").startswith(str(expected or ""))
+        case "ends_with":
+            return str(actual or "").endswith(str(expected or ""))
         case "in":
             vals = expected if isinstance(expected, list) else str(expected).split(",")
             return actual in vals
@@ -127,20 +154,24 @@ def _compare(actual: Any, op: str, expected: Any) -> bool:  # noqa: PLR0911
             except (TypeError, ValueError):
                 return False
             match op:
-                case "gt":  return a > e
-                case "gte": return a >= e
-                case "lt":  return a < e
-                case "lte": return a <= e
-                case _:     return False
+                case "gt":
+                    return a > e
+                case "gte":
+                    return a >= e
+                case "lt":
+                    return a < e
+                case "lte":
+                    return a <= e
+                case _:
+                    return False
 
 
 # ------------------------------------------------------------------
 # Action execution (pure — returns mutations, no DB calls)
 # ------------------------------------------------------------------
 
-def execute_actions(
-    actions: list[dict[str, Any]], ctx: ExecutionContext
-) -> ExecutionResult:
+
+def execute_actions(actions: list[dict[str, Any]], ctx: ExecutionContext) -> ExecutionResult:
     result = ExecutionResult(matched=True)
 
     if len(actions) > _MAX_ACTIONS:
@@ -154,7 +185,7 @@ def execute_actions(
         except (ExpressionError, RuleError) as exc:
             result.errors.append(str(exc))
             # Non-fatal: log error, continue with remaining actions
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             result.errors.append(f"Unexpected error in action: {exc}")
 
     # Apply field mutations back to context record for downstream actions
@@ -163,9 +194,7 @@ def execute_actions(
     return result
 
 
-def _execute_action(
-    action: dict[str, Any], ctx: ExecutionContext, result: ExecutionResult
-) -> None:
+def _execute_action(action: dict[str, Any], ctx: ExecutionContext, result: ExecutionResult) -> None:
     atype = action.get("type")
 
     match atype:
@@ -224,12 +253,14 @@ def _execute_action(
         case "send_notification":
             to_field = action.get("to_field")
             recipient = ctx.record.get(to_field) if to_field else action.get("to")
-            result.notifications.append({
-                "to": recipient,
-                "subject": action.get("subject", ""),
-                "template": action.get("template", ""),
-                "context": dict(ctx.record),
-            })
+            result.notifications.append(
+                {
+                    "to": recipient,
+                    "subject": action.get("subject", ""),
+                    "template": action.get("template", ""),
+                    "context": dict(ctx.record),
+                }
+            )
 
         case "call_webhook":
             # Dispatched to notifications queue, not executed inline in sandbox
@@ -237,11 +268,13 @@ def _execute_action(
                 k: evaluate(v, ctx.record) if isinstance(v, dict) else v
                 for k, v in action.get("payload", {}).items()
             }
-            result.webhooks.append({
-                "url": action.get("url"),
-                "method": action.get("method", "POST"),
-                "payload": payload,
-            })
+            result.webhooks.append(
+                {
+                    "url": action.get("url"),
+                    "method": action.get("method", "POST"),
+                    "payload": payload,
+                }
+            )
 
         case "stop":
             result.stopped = True
@@ -253,6 +286,7 @@ def _execute_action(
 # ------------------------------------------------------------------
 # Top-level entry point
 # ------------------------------------------------------------------
+
 
 def run_rule(
     rule_trigger: dict[str, Any],
@@ -266,10 +300,13 @@ def run_rule(
     """
     # Check trigger event matches
     trigger_event = rule_trigger.get("event", "")
-    if trigger_event and trigger_event != ctx.event:
-        # "field.changed" is a sub-event of "record.updated"
-        if not (trigger_event == "field.changed" and ctx.event == "record.updated"):
-            return ExecutionResult(matched=False)
+    # "field.changed" is a sub-event of "record.updated"
+    if (
+        trigger_event
+        and trigger_event != ctx.event
+        and not (trigger_event == "field.changed" and ctx.event == "record.updated")
+    ):
+        return ExecutionResult(matched=False)
 
     # For field.changed: verify at least one watched field actually changed
     if trigger_event == "field.changed":
@@ -294,6 +331,7 @@ def run_rule(
 # Batch evaluation — all rules matching one event, evaluated together so
 # priority-based conflict resolution (ТЗ 3.5.4) is actually possible.
 # ------------------------------------------------------------------
+
 
 @dataclass
 class RuleOutcome:
@@ -374,7 +412,9 @@ def run_rules_batch(
             batch.notifications.extend(result.notifications)
             batch.webhooks.extend(result.webhooks)
 
-        batch.outcomes.append(RuleOutcome(rule_id=rule_id, result=result, overridden_fields=overridden))
+        batch.outcomes.append(
+            RuleOutcome(rule_id=rule_id, result=result, overridden_fields=overridden)
+        )
 
     batch.conflicts = list(conflicts_by_field.values())
     return batch

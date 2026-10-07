@@ -1,4 +1,5 @@
 """ImportService: parse CSV/XLSX and bulk-create/upsert records."""
+
 from __future__ import annotations
 
 import csv
@@ -29,7 +30,7 @@ class ImportResult:
     aborted: bool = False
 
 
-class ImportError(Exception):
+class ImportValidationError(Exception):
     def __init__(self, detail: str, status_code: int = 400) -> None:
         self.detail = detail
         self.status_code = status_code
@@ -65,7 +66,7 @@ class ImportService:
             "обновление существующих записей по ключевому полю").
         """
         if len(file_data) > MAX_IMPORT_FILE_SIZE:
-            raise ImportError(
+            raise ImportValidationError(
                 f"File exceeds the maximum import size of {MAX_IMPORT_FILE_SIZE // 1_048_576} MB",
             )
 
@@ -75,13 +76,15 @@ class ImportService:
         elif ext in _EXCEL_EXTS:
             rows = self._parse_xlsx(file_data)
         else:
-            raise ImportError(f"Unsupported file type: {ext!r}. Upload a CSV or XLSX file.")
+            raise ImportValidationError(
+                f"Unsupported file type: {ext!r}. Upload a CSV or XLSX file."
+            )
 
         if not rows:
             return ImportResult()
 
         if len(rows) > MAX_IMPORT_ROWS:
-            raise ImportError(
+            raise ImportValidationError(
                 f"File contains {len(rows)} rows, exceeding the limit of {MAX_IMPORT_ROWS}. "
                 "Split it into smaller files.",
             )
@@ -115,10 +118,16 @@ class ImportService:
                 continue
 
             try:
-                existing_id = await self._find_by_key(entity_id, key_field, payload) if key_field else None
+                existing_id = (
+                    await self._find_by_key(entity_id, key_field, payload) if key_field else None
+                )
                 if existing_id is not None:
                     await svc.update_record(
-                        entity_id, existing_id, RecordUpdate(payload=payload), app_id, actor_id=actor_id,
+                        entity_id,
+                        existing_id,
+                        RecordUpdate(payload=payload),
+                        app_id,
+                        actor_id=actor_id,
                     )
                     result.updated += 1
                 else:
@@ -131,8 +140,10 @@ class ImportService:
                 result.errors.append({"row": row_num, "error": error_message, "data": payload})
                 if on_error == "abort":
                     break
-            except Exception as exc:  # noqa: BLE001
-                result.errors.append({"row": row_num, "error": f"Unexpected error: {exc}", "data": payload})
+            except Exception as exc:
+                result.errors.append(
+                    {"row": row_num, "error": f"Unexpected error: {exc}", "data": payload}
+                )
                 if on_error == "abort":
                     break
 
@@ -159,7 +170,10 @@ class ImportService:
         return result
 
     async def _find_by_key(
-        self, entity_id: uuid.UUID, key_field: str, payload: dict[str, Any],
+        self,
+        entity_id: uuid.UUID,
+        key_field: str,
+        payload: dict[str, Any],
     ) -> uuid.UUID | None:
         """Return the id of an existing, non-deleted record whose `key_field`
         matches this row's value for it — or None if there's no match or the
@@ -194,7 +208,9 @@ class ImportService:
         elif ext in _EXCEL_EXTS:
             rows = self._parse_xlsx(file_data)
         else:
-            raise ImportError(f"Unsupported file type: {ext!r}. Upload a CSV or XLSX file.")
+            raise ImportValidationError(
+                f"Unsupported file type: {ext!r}. Upload a CSV or XLSX file."
+            )
 
         if not rows:
             return {"headers": [], "sample": [], "total_rows": 0}
@@ -217,9 +233,9 @@ class ImportService:
 
     def _parse_xlsx(self, data: bytes) -> list[dict[str, Any]]:
         try:
-            import openpyxl  # noqa: PLC0415
-        except ImportError as exc:
-            raise ImportError(
+            import openpyxl
+        except ImportValidationError as exc:
+            raise ImportValidationError(
                 "openpyxl is required to parse Excel files. Contact your administrator.",
                 status_code=501,
             ) from exc
@@ -237,15 +253,11 @@ class ImportService:
         if not all_rows:
             return []
 
-        headers = [
-            str(h) if h is not None else f"col_{i}"
-            for i, h in enumerate(all_rows[0])
-        ]
+        headers = [str(h) if h is not None else f"col_{i}" for i, h in enumerate(all_rows[0])]
 
         result: list[dict[str, Any]] = []
         for raw_row in all_rows[1:]:
-            result.append({
-                headers[i]: (str(v) if v is not None else None)
-                for i, v in enumerate(raw_row)
-            })
+            result.append(
+                {headers[i]: (str(v) if v is not None else None) for i, v in enumerate(raw_row)}
+            )
         return result

@@ -46,10 +46,26 @@ TEMPLATES: dict[str, dict[str, Any]] = {
         "modules": [],
     },
     # Backward-compatible aliases used by the older frontend gallery.
-    "tasks": {"name": "Task dispatcher", "description": "Projects and tasks.", "modules": ["projects"]},
-    "inventory": {"name": "Inventory", "description": "Warehouse module.", "modules": ["warehouse"]},
-    "visitors": {"name": "Visitor registration", "description": "Enterprise base module.", "modules": ["enterprise"]},
-    "survey": {"name": "Simple survey", "description": "Empty application template.", "modules": []},
+    "tasks": {
+        "name": "Task dispatcher",
+        "description": "Projects and tasks.",
+        "modules": ["projects"],
+    },
+    "inventory": {
+        "name": "Inventory",
+        "description": "Warehouse module.",
+        "modules": ["warehouse"],
+    },
+    "visitors": {
+        "name": "Visitor registration",
+        "description": "Enterprise base module.",
+        "modules": ["enterprise"],
+    },
+    "survey": {
+        "name": "Simple survey",
+        "description": "Empty application template.",
+        "modules": [],
+    },
 }
 
 

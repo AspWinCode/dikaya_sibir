@@ -1,4 +1,5 @@
 """RecordService: CRUD with JSONB payload, filter engine, cursor pagination, field validation."""
+
 import base64
 import json
 import re
@@ -7,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import and_, cast, func, or_, select, text, update
+from sqlalchemy import and_, cast, func, or_, select, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import Numeric
@@ -17,7 +18,6 @@ from app.core.metrics import record_operations
 from app.models.data import Record
 from app.models.identity import AbacRule, User
 from app.models.metamodel import Entity, Field, Relation
-from app.services import abac
 from app.schemas.common import CursorPage
 from app.schemas.records import (
     FilterOp,
@@ -28,6 +28,7 @@ from app.schemas.records import (
     RecordUpdate,
     TrashedRecordRead,
 )
+from app.services import abac
 
 logger = structlog.get_logger(__name__)
 
@@ -56,6 +57,7 @@ def _cursor_decode(cursor: str) -> tuple[datetime, uuid.UUID]:
 # ------------------------------------------------------------------
 # JSONB filter → SQLAlchemy expression
 # ------------------------------------------------------------------
+
 
 def _jsonb_text(field: str) -> Any:
     """payload->>'field' — text extraction."""
@@ -93,12 +95,12 @@ def _build_condition(f: ParsedFilter) -> Any:
             # field is absent from JSON or explicitly null
             return or_(
                 text_expr.is_(None),
-                ~Record.payload.has_key(f.field),  # type: ignore[attr-defined]
+                ~Record.payload.has_key(f.field),
             )
         case FilterOp.IS_NOT_NULL:
             return and_(
                 text_expr.isnot(None),
-                Record.payload.has_key(f.field),  # type: ignore[attr-defined]
+                Record.payload.has_key(f.field),
             )
         case _:
             raise ValueError(f"Unsupported filter op: {f.op}")
@@ -107,6 +109,7 @@ def _build_condition(f: ParsedFilter) -> Any:
 # ------------------------------------------------------------------
 # Field validation
 # ------------------------------------------------------------------
+
 
 def _validate_payload(
     payload: dict[str, Any],
@@ -131,10 +134,7 @@ def _validate_payload(
 
     if not partial:
         # Check required fields
-        missing = [
-            f.name for f in field_map.values()
-            if f.is_required and f.name not in payload
-        ]
+        missing = [f.name for f in field_map.values() if f.is_required and f.name not in payload]
         if missing:
             raise RecordValidationError(f"Required fields missing: {missing}")
 
@@ -194,10 +194,13 @@ def _eval_compare(actual: Any, op: str | None, expected: Any) -> bool:
     try:
         a, b = float(actual), float(expected)
         return {
-            "eq": a == b, "ne": a != b,
-            "gt": a > b, "gte": a >= b,
-            "lt": a < b, "lte": a <= b,
-        }.get(op, False)
+            "eq": a == b,
+            "ne": a != b,
+            "gt": a > b,
+            "gte": a >= b,
+            "lt": a < b,
+            "lte": a <= b,
+        }.get(op or "", False)
     except (TypeError, ValueError):
         pass
     s_actual = str(actual)
@@ -253,7 +256,9 @@ def _check_field_value(field: Field, name: str, value: Any, rules: dict) -> None
 
     if ft in ("text", "long_text", "rich_text", "url", "email", "phone"):
         if not isinstance(value, str):
-            raise RecordValidationError(f"Field '{name}' expects string, got {type(value).__name__}")
+            raise RecordValidationError(
+                f"Field '{name}' expects string, got {type(value).__name__}"
+            )
         if "min_length" in rules and len(value) < rules["min_length"]:
             raise RecordValidationError(f"Field '{name}' below min_length {rules['min_length']}")
         if "max_length" in rules and len(value) > rules["max_length"]:
@@ -265,13 +270,14 @@ def _check_field_value(field: Field, name: str, value: Any, rules: dict) -> None
                 ok = True  # a broken stored regex shouldn't block every write
             if not ok:
                 raise RecordValidationError(
-                    rules.get("pattern_message") or f"Field '{name}' does not match required pattern"
+                    rules.get("pattern_message")
+                    or f"Field '{name}' does not match required pattern"
                 )
         if ft == "email" and "@" not in value:
             raise RecordValidationError(f"Field '{name}' is not a valid email")
 
     elif ft in ("number", "decimal", "currency"):
-        if not isinstance(value, (int, float)):
+        if not isinstance(value, int | float):
             try:
                 float(value)
             except (TypeError, ValueError) as exc:
@@ -289,9 +295,13 @@ def _check_field_value(field: Field, name: str, value: Any, rules: dict) -> None
         try:
             dt = _parse_date_value(value)
         except (TypeError, ValueError) as exc:
-            raise RecordValidationError(f"Field '{name}' expects an ISO date/datetime string") from exc
+            raise RecordValidationError(
+                f"Field '{name}' expects an ISO date/datetime string"
+            ) from exc
         if "min_date" in rules and dt < _parse_date_value(rules["min_date"]):
-            raise RecordValidationError(f"Field '{name}' is before minimum date {rules['min_date']}")
+            raise RecordValidationError(
+                f"Field '{name}' is before minimum date {rules['min_date']}"
+            )
         if "max_date" in rules and dt > _parse_date_value(rules["max_date"]):
             raise RecordValidationError(f"Field '{name}' is after maximum date {rules['max_date']}")
         if rules.get("future_only") and dt <= datetime.now(UTC):
@@ -305,7 +315,9 @@ def _check_field_value(field: Field, name: str, value: Any, rules: dict) -> None
             raise RecordValidationError(f"Field '{name}': {value!r} not in choices {choices}")
         allowed = rules.get("allowed_values")
         if allowed and value not in allowed:
-            raise RecordValidationError(f"Field '{name}': {value!r} not in allowed values {allowed}")
+            raise RecordValidationError(
+                f"Field '{name}': {value!r} not in allowed values {allowed}"
+            )
 
     elif ft == "autonumber":
         # Auto-filled by SequenceService — never sent by the user; skip validation
@@ -325,14 +337,19 @@ def _check_field_value(field: Field, name: str, value: Any, rules: dict) -> None
             if invalid:
                 raise RecordValidationError(f"Field '{name}': values not allowed {invalid}")
         if "min_selected" in rules and len(value) < rules["min_selected"]:
-            raise RecordValidationError(f"Field '{name}' requires at least {rules['min_selected']} selected")
+            raise RecordValidationError(
+                f"Field '{name}' requires at least {rules['min_selected']} selected"
+            )
         if "max_selected" in rules and len(value) > rules["max_selected"]:
-            raise RecordValidationError(f"Field '{name}' allows at most {rules['max_selected']} selected")
+            raise RecordValidationError(
+                f"Field '{name}' allows at most {rules['max_selected']} selected"
+            )
 
 
 # ------------------------------------------------------------------
 # Formula evaluation
 # ------------------------------------------------------------------
+
 
 def _evaluate_formulas(payload: dict[str, Any], fields: list[Field]) -> dict[str, Any]:
     """Compute formula fields and inject their values into the payload."""
@@ -344,9 +361,15 @@ def _evaluate_formulas(payload: dict[str, Any], fields: list[Field]) -> dict[str
 
     result = dict(payload)
     for field in formula_fields:
-        ast = field.formula_definition.get("ast") if isinstance(field.formula_definition, dict) else field.formula_definition
+        ast = (
+            field.formula_definition.get("ast")
+            if isinstance(field.formula_definition, dict)
+            else field.formula_definition
+        )
         if ast is None:
             ast = field.formula_definition
+        if not isinstance(ast, dict):
+            continue
         try:
             value = evaluate(ast, result)
             result[field.name] = value
@@ -360,19 +383,30 @@ def _evaluate_formulas(payload: dict[str, Any], fields: list[Field]) -> dict[str
 # app.services.abac, shared with rule validation in app.services.roles.
 # ------------------------------------------------------------------
 
+
 async def _apply_abac_row_scope(
-    db: AsyncSession, stmt: Any, entity_id: uuid.UUID,
-    actor_id: uuid.UUID | None, actor_roles: list[str] | None,
+    db: AsyncSession,
+    stmt: Any,
+    entity_id: uuid.UUID,
+    actor_id: uuid.UUID | None,
+    actor_roles: list[str] | None,
 ) -> Any:
     return await abac.apply_row_scope(
-        db, stmt, entity_id, actor_id, actor_roles,
-        record_model=Record, abac_rule_model=AbacRule, user_model=User,
+        db,
+        stmt,
+        entity_id,
+        actor_id,
+        actor_roles,
+        record_model=Record,
+        abac_rule_model=AbacRule,
+        user_model=User,
     )
 
 
 # ------------------------------------------------------------------
 # RecordService
 # ------------------------------------------------------------------
+
 
 class RecordService:
     def __init__(self, db: AsyncSession) -> None:
@@ -389,8 +423,11 @@ class RecordService:
         return self._sensitive_names(await self._get_entity_fields(entity_id))
 
     async def list_records(
-        self, entity_id: uuid.UUID, params: RecordListParams,
-        actor_id: uuid.UUID | None = None, actor_roles: list[str] | None = None,
+        self,
+        entity_id: uuid.UUID,
+        params: RecordListParams,
+        actor_id: uuid.UUID | None = None,
+        actor_roles: list[str] | None = None,
     ) -> CursorPage[RecordRead]:
         fields = await self._get_entity_fields(entity_id)
         sensitive_names = self._sensitive_names(fields)
@@ -421,9 +458,7 @@ class RecordService:
         # Custom sort by payload field
         if params.sort_field:
             sort_expr = _jsonb_text(params.sort_field)
-            stmt = stmt.order_by(
-                sort_expr.asc() if params.sort_dir == "asc" else sort_expr.desc()
-            )
+            stmt = stmt.order_by(sort_expr.asc() if params.sort_dir == "asc" else sort_expr.desc())
 
         # Cursor pagination
         if params.cursor:
@@ -441,23 +476,26 @@ class RecordService:
 
         has_more = len(rows) > params.limit
         items = rows[: params.limit]
-        next_cursor = (
-            _cursor_encode(items[-1].created_at, items[-1].id) if has_more else None
-        )
+        next_cursor = _cursor_encode(items[-1].created_at, items[-1].id) if has_more else None
         record_operations.labels(operation="list").inc()
         reads = [RecordRead.model_validate(r) for r in items]
         if sensitive_names:
             reads = [
-                r.model_copy(update={
-                    "payload": field_crypto.decrypt_sensitive_fields(r.payload, sensitive_names)
-                })
+                r.model_copy(
+                    update={
+                        "payload": field_crypto.decrypt_sensitive_fields(r.payload, sensitive_names)
+                    }
+                )
                 for r in reads
             ]
         return CursorPage(items=reads, next_cursor=next_cursor, has_more=has_more)
 
     async def _assert_row_visible(
-        self, entity_id: uuid.UUID, record_id: uuid.UUID,
-        actor_id: uuid.UUID | None, actor_roles: list[str] | None,
+        self,
+        entity_id: uuid.UUID,
+        record_id: uuid.UUID,
+        actor_id: uuid.UUID | None,
+        actor_roles: list[str] | None,
     ) -> None:
         """Raise RecordNotFoundError if row-level ABAC hides this record from
         the caller. Used to gate reads *and* writes — a "deny" ABAC rule
@@ -466,15 +504,22 @@ class RecordService:
         if not actor_roles:
             return
         stmt = await _apply_abac_row_scope(
-            self._db, select(Record.id).where(Record.id == record_id), entity_id, actor_id, actor_roles,
+            self._db,
+            select(Record.id).where(Record.id == record_id),
+            entity_id,
+            actor_id,
+            actor_roles,
         )
         visible = (await self._db.execute(stmt)).scalar_one_or_none()
         if visible is None:
             raise RecordNotFoundError(f"Record {record_id} not found")
 
     async def get_record(
-        self, entity_id: uuid.UUID, record_id: uuid.UUID,
-        actor_id: uuid.UUID | None = None, actor_roles: list[str] | None = None,
+        self,
+        entity_id: uuid.UUID,
+        record_id: uuid.UUID,
+        actor_id: uuid.UUID | None = None,
+        actor_roles: list[str] | None = None,
     ) -> RecordRead:
         record = await self._fetch(entity_id, record_id)
         await self._assert_row_visible(entity_id, record_id, actor_id, actor_roles)
@@ -482,9 +527,11 @@ class RecordService:
         read = RecordRead.model_validate(record)
         sensitive_names = await self.get_sensitive_field_names(entity_id)
         if sensitive_names:
-            read = read.model_copy(update={
-                "payload": field_crypto.decrypt_sensitive_fields(read.payload, sensitive_names)
-            })
+            read = read.model_copy(
+                update={
+                    "payload": field_crypto.decrypt_sensitive_fields(read.payload, sensitive_names)
+                }
+            )
         return read
 
     async def create_record(
@@ -510,7 +557,11 @@ class RecordService:
         # raises cleanly with no rollback needed. Unlike automation rules
         # (async, post-commit — see RuleService.evaluate_rules_for_event).
         await ValidationRuleService(self._db).run(
-            app_id, entity_id, "record.created", payload, actor_id=actor_id,
+            app_id,
+            entity_id,
+            "record.created",
+            payload,
+            actor_id=actor_id,
         )
 
         sensitive_names = self._sensitive_names(fields)
@@ -553,8 +604,13 @@ class RecordService:
         merged = _evaluate_formulas(merged, fields)
 
         await ValidationRuleService(self._db).run(
-            app_id, entity_id, "record.updated", merged, record_id=record_id,
-            changed_fields=list(data.payload.keys()), actor_id=actor_id,
+            app_id,
+            entity_id,
+            "record.updated",
+            merged,
+            record_id=record_id,
+            changed_fields=list(data.payload.keys()),
+            actor_id=actor_id,
         )
 
         await self._db.execute(
@@ -572,7 +628,10 @@ class RecordService:
         return await self.get_record(entity_id, record_id)
 
     async def delete_record(
-        self, entity_id: uuid.UUID, record_id: uuid.UUID, hard: bool = False,
+        self,
+        entity_id: uuid.UUID,
+        record_id: uuid.UUID,
+        hard: bool = False,
         actor_id: uuid.UUID | None = None,
         actor_roles: list[str] | None = None,
         _seen: set[tuple[uuid.UUID, uuid.UUID]] | None = None,
@@ -626,9 +685,11 @@ class RecordService:
         read = RecordRead.model_validate(record)
         sensitive_names = await self.get_sensitive_field_names(entity_id)
         if sensitive_names:
-            read = read.model_copy(update={
-                "payload": field_crypto.decrypt_sensitive_fields(read.payload, sensitive_names)
-            })
+            read = read.model_copy(
+                update={
+                    "payload": field_crypto.decrypt_sensitive_fields(read.payload, sensitive_names)
+                }
+            )
         return read
 
     async def list_deleted_records(
@@ -691,7 +752,10 @@ class RecordService:
     # Cascade helpers
 
     async def _cascade_soft_delete(
-        self, entity_id: uuid.UUID, record_id: uuid.UUID, actor_id: uuid.UUID | None,
+        self,
+        entity_id: uuid.UUID,
+        record_id: uuid.UUID,
+        actor_id: uuid.UUID | None,
         seen: set[tuple[uuid.UUID, uuid.UUID]],
     ) -> None:
         """Soft-delete dependents: records in other entities whose relation field
@@ -706,28 +770,42 @@ class RecordService:
         """
         cascade_types = ("one_to_one", "one_to_many")
 
-        in_rels = (await self._db.execute(
-            select(Relation).where(
-                Relation.to_entity_id == entity_id,
-                Relation.relation_type.in_(cascade_types),
+        in_rels = (
+            (
+                await self._db.execute(
+                    select(Relation).where(
+                        Relation.to_entity_id == entity_id,
+                        Relation.relation_type.in_(cascade_types),
+                    )
+                )
             )
-        )).scalars().all()
+            .scalars()
+            .all()
+        )
 
         for rel in in_rels:
             field = rel.from_field_name
-            children = (await self._db.execute(
-                select(Record).where(
-                    Record.entity_id == rel.from_entity_id,
-                    Record.is_deleted.is_(False),
-                    or_(
-                        Record.payload[field].astext == str(record_id),
-                        cast(Record.payload[field], JSONB).contains([str(record_id)]),
-                    ),
+            children = (
+                (
+                    await self._db.execute(
+                        select(Record).where(
+                            Record.entity_id == rel.from_entity_id,
+                            Record.is_deleted.is_(False),
+                            or_(
+                                Record.payload[field].astext == str(record_id),
+                                cast(Record.payload[field], JSONB).contains([str(record_id)]),
+                            ),
+                        )
+                    )
                 )
-            )).scalars().all()
+                .scalars()
+                .all()
+            )
 
             for child in children:
-                await self._soft_delete_child(rel.from_entity_id, child.id, record_id, actor_id, seen)
+                await self._soft_delete_child(
+                    rel.from_entity_id, child.id, record_id, actor_id, seen
+                )
 
     async def _soft_delete_child(
         self,
@@ -753,20 +831,28 @@ class RecordService:
                 Record.is_deleted.is_(False),
             )
             .values(
-                is_deleted=True, cascade_deleted_by=parent_id,
-                deleted_at=datetime.now(UTC), deleted_by=actor_id,
+                is_deleted=True,
+                cascade_deleted_by=parent_id,
+                deleted_at=datetime.now(UTC),
+                deleted_by=actor_id,
             )
         )
 
     async def _cascade_restore(self, entity_id: uuid.UUID, record_id: uuid.UUID) -> None:
         """Restore all records that were cascade-deleted because of this record."""
         # Find direct children that were cascade-deleted by this record
-        children = (await self._db.execute(
-            select(Record).where(
-                Record.cascade_deleted_by == record_id,
-                Record.is_deleted.is_(True),
+        children = (
+            (
+                await self._db.execute(
+                    select(Record).where(
+                        Record.cascade_deleted_by == record_id,
+                        Record.is_deleted.is_(True),
+                    )
+                )
             )
-        )).scalars().all()
+            .scalars()
+            .all()
+        )
 
         for child in children:
             await self._cascade_restore(child.entity_id, child.id)
@@ -793,7 +879,5 @@ class RecordService:
         return record
 
     async def _get_entity_fields(self, entity_id: uuid.UUID) -> list[Field]:
-        result = await self._db.execute(
-            select(Field).where(Field.entity_id == entity_id)
-        )
+        result = await self._db.execute(select(Field).where(Field.entity_id == entity_id))
         return list(result.scalars())

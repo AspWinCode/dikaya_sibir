@@ -1,6 +1,8 @@
 """Async email service using aiosmtplib."""
+
 import structlog
 from aiosmtplib import SMTP, SMTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 
@@ -47,7 +49,7 @@ async def send_email(
 
 
 async def send_via_template(
-    db,
+    db: AsyncSession,
     code: str,
     to: str,
     context: dict,
@@ -58,6 +60,7 @@ async def send_via_template(
     """Render a template by code and send. Falls back to inline content if the
     template is missing or fails to render."""
     from app.services.email_templates import EmailTemplateRenderError, EmailTemplateService
+
     try:
         rendered = await EmailTemplateService(db).render_by_code(code, context)
     except EmailTemplateRenderError:
@@ -72,21 +75,27 @@ async def send_password_reset_email(
     to: str,
     display_name: str,
     reset_url: str,
-    db=None,
+    db: AsyncSession | None = None,
 ) -> bool:
     if db is not None:
         return await send_via_template(
-            db, "password_reset", to,
+            db,
+            "password_reset",
+            to,
             {"display_name": display_name, "reset_url": reset_url},
             fallback_subject="Сброс пароля",
-            fallback_html=f"<p>Здравствуйте, {display_name}!</p><p><a href=\"{reset_url}\">Сбросить пароль</a></p>",
+            fallback_html=(
+                f"<p>Здравствуйте, {display_name}!</p>"
+                f'<p><a href="{reset_url}">Сбросить пароль</a></p>'
+            ),
         )
     subject = "Сброс пароля"
     html = (
         f"<p>Здравствуйте, {display_name}!</p>"
         "<p>Мы получили запрос на сброс пароля для вашего аккаунта.</p>"
-        f"<p><a href=\"{reset_url}\">Сбросить пароль</a></p>"
-        "<p>Ссылка действительна 1 час. Если вы не запрашивали сброс — просто проигнорируйте это письмо.</p>"
+        f'<p><a href="{reset_url}">Сбросить пароль</a></p>'
+        "<p>Ссылка действительна 1 час. Если вы не запрашивали сброс — "
+        "просто проигнорируйте это письмо.</p>"
     )
     text = (
         f"Здравствуйте, {display_name}!\n\n"
@@ -103,21 +112,31 @@ async def send_invitation_email(
     display_name: str,
     temp_password: str,
     platform_url: str = "http://localhost:5173/editor",
-    db=None,
+    db: AsyncSession | None = None,
 ) -> bool:
     if db is not None:
         return await send_via_template(
-            db, "invitation", to,
-            {"display_name": display_name, "email": to, "temp_password": temp_password, "platform_url": platform_url},
+            db,
+            "invitation",
+            to,
+            {
+                "display_name": display_name,
+                "email": to,
+                "temp_password": temp_password,
+                "platform_url": platform_url,
+            },
             fallback_subject="Приглашение на платформу",
-            fallback_html=f"<p>Здравствуйте, {display_name}!</p><p>Email: {to}, пароль: {temp_password}</p>",
+            fallback_html=(
+                f"<p>Здравствуйте, {display_name}!</p>"
+                f"<p>Email: {to}, пароль: {temp_password}</p>"
+            ),
         )
     subject = "Приглашение на платформу"
     html = (
         f"<p>Здравствуйте, {display_name}!</p>"
         "<p>Вас пригласили на платформу бизнес-приложений.</p>"
         f"<p><b>Email:</b> {to}<br><b>Временный пароль:</b> {temp_password}</p>"
-        f"<p>Войдите по ссылке: <a href=\"{platform_url}\">{platform_url}</a></p>"
+        f'<p>Войдите по ссылке: <a href="{platform_url}">{platform_url}</a></p>'
         "<p>Смените пароль после первого входа.</p>"
     )
     text = (

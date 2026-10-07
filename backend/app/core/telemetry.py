@@ -15,6 +15,7 @@ Usage in main.py lifespan:
     from app.core.telemetry import configure_telemetry
     configure_telemetry()
 """
+
 from __future__ import annotations
 
 import logging
@@ -46,10 +47,12 @@ def configure_telemetry() -> None:
         otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
         if app_env == "production" and otlp_endpoint:
             from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
             exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
             logger.info("otel_otlp_exporter enabled: %s", otlp_endpoint)
         else:
             from opentelemetry.sdk.trace.export import ConsoleSpanExporter
+
             exporter = ConsoleSpanExporter()  # type: ignore[assignment]
             logger.info("otel_console_exporter (dev or no OTLP endpoint)")
 
@@ -64,7 +67,8 @@ def instrument_fastapi(app: object) -> None:
     """Attach FastAPI auto-instrumentation after app is created."""
     try:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-        FastAPIInstrumentor.instrument_app(app)  # type: ignore[arg-type]
+
+        FastAPIInstrumentor.instrument_app(app)
     except ImportError:
         pass
 
@@ -73,7 +77,8 @@ def instrument_sqlalchemy(engine: object) -> None:
     """Attach SQLAlchemy auto-instrumentation to the async engine."""
     try:
         from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-        SQLAlchemyInstrumentor().instrument(engine=engine)  # type: ignore[arg-type]
+
+        SQLAlchemyInstrumentor().instrument(engine=engine)
     except ImportError:
         pass
 
@@ -82,6 +87,7 @@ def get_tracer(name: str) -> object:
     """Convenience wrapper — returns a no-op tracer if OTel is not configured."""
     try:
         from opentelemetry import trace
+
         return trace.get_tracer(name)
     except ImportError:
         import contextlib

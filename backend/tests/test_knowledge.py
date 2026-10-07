@@ -1,15 +1,15 @@
 """Knowledge base tests (ТЗ 3.12): article CRUD/search + image hosting."""
+
 from __future__ import annotations
 
 import uuid
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
 from app.services.knowledge import KnowledgeService
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.test_files import FakeAntivirus, FakeStorage
 
@@ -21,7 +21,8 @@ async def admin(db_session: AsyncSession) -> User:
     if not await db_session.get(Role, "platform_admin"):
         db_session.add(Role(id="platform_admin", display_name="Platform Admin", is_system=True))
     user = User(
-        email="kb_admin@example.com", display_name="KB Admin",
+        email="kb_admin@example.com",
+        display_name="KB Admin",
         password_hash=hash_password("Admin1234!"),
     )
     db_session.add(user)
@@ -36,7 +37,8 @@ async def regular_user(db_session: AsyncSession) -> User:
     if not await db_session.get(Role, "app_builder"):
         db_session.add(Role(id="app_builder", display_name="Builder", is_system=True))
     user = User(
-        email="kb_user@example.com", display_name="Regular",
+        email="kb_user@example.com",
+        display_name="Regular",
         password_hash=hash_password("User1234!"),
     )
     db_session.add(user)
@@ -70,7 +72,9 @@ async def test_list_articles_empty(client: AsyncClient, regular_user: User) -> N
 
 
 @pytest.mark.asyncio
-async def test_create_article_forbidden_for_non_admin(client: AsyncClient, regular_user: User) -> None:
+async def test_create_article_forbidden_for_non_admin(
+    client: AsyncClient, regular_user: User
+) -> None:
     token = await _login(client, regular_user.email, "User1234!")
     resp = await client.post(
         "/api/v1/kb/articles",
@@ -121,7 +125,9 @@ async def test_duplicate_slug_returns_409(client: AsyncClient, admin: User) -> N
     r1 = await client.post("/api/v1/kb/articles", json=body, headers=_headers(token))
     assert r1.status_code == 201, r1.text
     r2 = await client.post(
-        "/api/v1/kb/articles", json={**body, "title": "Second"}, headers=_headers(token),
+        "/api/v1/kb/articles",
+        json={**body, "title": "Second"},
+        headers=_headers(token),
     )
     assert r2.status_code == 409
 
@@ -154,7 +160,9 @@ async def test_get_unknown_article_404(client: AsyncClient, regular_user: User) 
 
 @pytest.mark.asyncio
 async def test_unpublished_article_hidden_from_regular_user(
-    client: AsyncClient, admin: User, regular_user: User,
+    client: AsyncClient,
+    admin: User,
+    regular_user: User,
 ) -> None:
     admin_token = await _login(client, admin.email, "Admin1234!")
     create = await client.post(
@@ -168,13 +176,17 @@ async def test_unpublished_article_hidden_from_regular_user(
     resp = await client.get("/api/v1/kb/articles/draft-article", headers=_headers(user_token))
     assert resp.status_code == 404
 
-    admin_resp = await client.get("/api/v1/kb/articles/draft-article", headers=_headers(admin_token))
+    admin_resp = await client.get(
+        "/api/v1/kb/articles/draft-article", headers=_headers(admin_token)
+    )
     assert admin_resp.status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_unpublished_article_excluded_from_regular_user_list(
-    client: AsyncClient, admin: User, regular_user: User,
+    client: AsyncClient,
+    admin: User,
+    regular_user: User,
 ) -> None:
     admin_token = await _login(client, admin.email, "Admin1234!")
     await client.post(
@@ -217,7 +229,9 @@ async def test_update_article(client: AsyncClient, admin: User) -> None:
 async def test_update_unknown_article_404(client: AsyncClient, admin: User) -> None:
     token = await _login(client, admin.email, "Admin1234!")
     resp = await client.patch(
-        f"/api/v1/kb/articles/{uuid.uuid4()}", json={"title": "X"}, headers=_headers(token),
+        f"/api/v1/kb/articles/{uuid.uuid4()}",
+        json={"title": "X"},
+        headers=_headers(token),
     )
     assert resp.status_code == 404
 
@@ -249,7 +263,11 @@ async def test_search_matches_title_and_content(client: AsyncClient, admin: User
     token = await _login(client, admin.email, "Admin1234!")
     await client.post(
         "/api/v1/kb/articles",
-        json={"title": "Настройка формул", "slug": "formulas", "content": "Формулы вычисляются автоматически"},
+        json={
+            "title": "Настройка формул",
+            "slug": "formulas",
+            "content": "Формулы вычисляются автоматически",
+        },
         headers=_headers(token),
     )
     await client.post(
@@ -288,10 +306,20 @@ async def test_articles_are_ordered_by_display_order(client: AsyncClient, admin:
     """Admin-controlled ordering (used by the Learning page's steps/materials
     sections) — created out of order, must come back sorted by display_order."""
     token = await _login(client, admin.email, "Admin1234!")
-    for title, slug, order in [("Third", "step-third", 2), ("First", "step-first", 0), ("Second", "step-second", 1)]:
+    for title, slug, order in [
+        ("Third", "step-third", 2),
+        ("First", "step-first", 0),
+        ("Second", "step-second", 1),
+    ]:
         await client.post(
             "/api/v1/kb/articles",
-            json={"title": title, "slug": slug, "category": "Следующие шаги", "display_order": order, "content": ""},
+            json={
+                "title": title,
+                "slug": slug,
+                "category": "Следующие шаги",
+                "display_order": order,
+                "content": "",
+            },
             headers=_headers(token),
         )
 
@@ -324,15 +352,25 @@ async def test_admin_can_reorder_article(client: AsyncClient, admin: User) -> No
 
 
 @pytest.mark.asyncio
-async def test_list_categories_returns_distinct_published_categories(client: AsyncClient, admin: User) -> None:
+async def test_list_categories_returns_distinct_published_categories(
+    client: AsyncClient, admin: User
+) -> None:
     token = await _login(client, admin.email, "Admin1234!")
     for slug, category, published in [
-        ("c1", "Правила", True), ("c2", "Правила", True),
-        ("c3", "Импорт", True), ("c4", "Черновик", False),
+        ("c1", "Правила", True),
+        ("c2", "Правила", True),
+        ("c3", "Импорт", True),
+        ("c4", "Черновик", False),
     ]:
         await client.post(
             "/api/v1/kb/articles",
-            json={"title": slug, "slug": slug, "category": category, "content": "", "is_published": published},
+            json={
+                "title": slug,
+                "slug": slug,
+                "category": category,
+                "content": "",
+                "is_published": published,
+            },
             headers=_headers(token),
         )
 
@@ -377,33 +415,45 @@ async def test_upload_image_rejects_bad_content_type() -> None:
     # Raises before any DB access, so — like the import size-limit tests —
     # no real session is needed.
     from app.services.knowledge import ImageError
+
     svc = KnowledgeService(None)  # type: ignore[arg-type]
     with pytest.raises(ImageError, match="Unsupported image type"):
-        await svc.upload_image(b"data", "application/pdf", FakeStorage(), FakeAntivirus(), actor_id=None)
+        await svc.upload_image(
+            b"data", "application/pdf", FakeStorage(), FakeAntivirus(), actor_id=None
+        )
 
 
 @pytest.mark.asyncio
 async def test_upload_image_rejects_infected_file() -> None:
     from app.services.knowledge import ImageError
+
     svc = KnowledgeService(None)  # type: ignore[arg-type]
     with pytest.raises(ImageError, match="antivirus"):
         await svc.upload_image(
-            b"eicar", "image/png", FakeStorage(), FakeAntivirus(infected=True), actor_id=None,
+            b"eicar",
+            "image/png",
+            FakeStorage(),
+            FakeAntivirus(infected=True),
+            actor_id=None,
         )
 
 
 @pytest.mark.asyncio
 async def test_upload_image_rejects_oversized(monkeypatch) -> None:
     from app.services.knowledge import ImageError
+
     svc = KnowledgeService(None)  # type: ignore[arg-type]
     monkeypatch.setattr(svc, "_MAX_IMAGE_SIZE", 10)
     with pytest.raises(ImageError, match="exceeds the maximum size"):
-        await svc.upload_image(b"x" * 100, "image/png", FakeStorage(), FakeAntivirus(), actor_id=None)
+        await svc.upload_image(
+            b"x" * 100, "image/png", FakeStorage(), FakeAntivirus(), actor_id=None
+        )
 
 
 @pytest.mark.asyncio
 async def test_get_image_url_unknown_id_raises(db_session: AsyncSession) -> None:
     from app.services.knowledge import ImageNotFoundError
+
     svc = KnowledgeService(db_session)
     with pytest.raises(ImageNotFoundError):
         await svc.get_image_url(uuid.uuid4(), FakeStorage())
@@ -415,8 +465,11 @@ async def test_get_image_url_unknown_id_raises(db_session: AsyncSession) -> None
 
 
 @pytest.mark.asyncio
-async def test_image_upload_endpoint_forbidden_for_non_admin(client: AsyncClient, regular_user: User) -> None:
+async def test_image_upload_endpoint_forbidden_for_non_admin(
+    client: AsyncClient, regular_user: User
+) -> None:
     import io
+
     token = await _login(client, regular_user.email, "User1234!")
     resp = await client.post(
         "/api/v1/kb/images",

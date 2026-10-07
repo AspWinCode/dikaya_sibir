@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class AppMemberRead(BaseModel):
@@ -65,7 +65,9 @@ class LockInfo(BaseModel):
 class AppCloneCreate(BaseModel):
     name: str = Field(min_length=2, max_length=256)
     slug: str | None = Field(
-        default=None, min_length=2, max_length=128,
+        default=None,
+        min_length=2,
+        max_length=128,
         pattern=r"^[a-z0-9][a-z0-9\-_]*$",
     )
 
@@ -88,6 +90,7 @@ class PublishIssue(BaseModel):
     """One integrity-check finding (ТЗ 3.11.1). `severity="error"` blocks
     publication; `"warning"` is informational only. `location` carries enough
     ids for the UI to link straight to the problem element."""
+
     severity: str = Field(pattern=r"^(error|warning)$")
     category: str  # "block_no_source" | "rule_empty" | "workflow_transition" | "relation_invalid"
     message: str

@@ -1,4 +1,5 @@
 """Document registrar / auto-number sequence endpoints."""
+
 from __future__ import annotations
 
 import uuid
@@ -27,6 +28,7 @@ router = APIRouter(
 # ------------------------------------------------------------------
 # Schemas
 # ------------------------------------------------------------------
+
 
 class SequenceRead(BaseModel):
     id: uuid.UUID
@@ -69,6 +71,7 @@ class NextValueResponse(BaseModel):
 # Helpers
 # ------------------------------------------------------------------
 
+
 async def _check_app(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> None:
     try:
         await AppService(db).get_app(app_id, actor_id=current_user.user_id)
@@ -79,6 +82,7 @@ async def _check_app(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> Non
 # ------------------------------------------------------------------
 # Endpoints
 # ------------------------------------------------------------------
+
 
 @router.get("", response_model=list[SequenceRead])
 async def list_sequences(
@@ -133,7 +137,9 @@ async def get_sequence(
     try:
         seq = await SequenceService(db).get_sequence(app_id, entity_id, sequence_id)
     except SequenceNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found"
+        ) from exc
     return SequenceRead.model_validate(seq)
 
 
@@ -149,7 +155,9 @@ async def update_sequence(
     await _check_app(app_id, current_user, db)
     try:
         seq = await SequenceService(db).update_sequence(
-            app_id, entity_id, sequence_id,
+            app_id,
+            entity_id,
+            sequence_id,
             prefix=body.prefix,
             suffix=body.suffix,
             padding=body.padding,
@@ -157,7 +165,9 @@ async def update_sequence(
             reset_on=body.reset_on,
         )
     except SequenceNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found"
+        ) from exc
     return SequenceRead.model_validate(seq)
 
 
@@ -173,7 +183,9 @@ async def delete_sequence(
     try:
         await SequenceService(db).delete_sequence(app_id, entity_id, sequence_id)
     except SequenceNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found"
+        ) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -190,6 +202,8 @@ async def get_next_value(
     try:
         seq = await SequenceService(db).get_sequence(app_id, entity_id, sequence_id)
     except SequenceNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Sequence not found"
+        ) from exc
     numeric = str(seq.next_value).zfill(seq.padding) if seq.padding > 0 else str(seq.next_value)
     return NextValueResponse(value=f"{seq.prefix}{numeric}{seq.suffix}")

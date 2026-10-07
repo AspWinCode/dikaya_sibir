@@ -1,22 +1,24 @@
 """App CRUD + entity/field management integration tests."""
-import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
+import pytest
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
-
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ------------------------------------------------------------------
 # Fixtures
 # ------------------------------------------------------------------
+
 
 @pytest.fixture()
 async def builder_user(db_session: AsyncSession) -> User:
     for role_id in ("app_builder", "platform_admin"):
         existing = await db_session.get(Role, role_id)
         if not existing:
-            db_session.add(Role(id=role_id, display_name=role_id.replace("_", " ").title(), is_system=True))
+            db_session.add(
+                Role(id=role_id, display_name=role_id.replace("_", " ").title(), is_system=True)
+            )
 
     user = User(
         email="builder@example.com",
@@ -39,6 +41,7 @@ async def _auth(client: AsyncClient, email: str, pwd: str) -> str:
 # ------------------------------------------------------------------
 # App CRUD
 # ------------------------------------------------------------------
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -69,7 +72,9 @@ async def test_create_app_duplicate_slug(client: AsyncClient, builder_user: User
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_list_apps_only_own(client: AsyncClient, db_session: AsyncSession, builder_user: User) -> None:
+async def test_list_apps_only_own(
+    client: AsyncClient, db_session: AsyncSession, builder_user: User
+) -> None:
     token = await _auth(client, builder_user.email, "Builder1234!")
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -87,7 +92,9 @@ async def test_publish_app(client: AsyncClient, builder_user: User) -> None:
     token = await _auth(client, builder_user.email, "Builder1234!")
     headers = {"Authorization": f"Bearer {token}"}
 
-    create = await client.post("/api/v1/apps", json={"slug": "pub-app", "name": "Pub"}, headers=headers)
+    create = await client.post(
+        "/api/v1/apps", json={"slug": "pub-app", "name": "Pub"}, headers=headers
+    )
     app_id = create.json()["id"]
 
     resp = await client.post(f"/api/v1/apps/{app_id}/publish", headers=headers)
@@ -98,6 +105,7 @@ async def test_publish_app(client: AsyncClient, builder_user: User) -> None:
 # ------------------------------------------------------------------
 # Entity management
 # ------------------------------------------------------------------
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -132,7 +140,9 @@ async def test_add_custom_field(client: AsyncClient, builder_user: User) -> None
     token = await _auth(client, builder_user.email, "Builder1234!")
     headers = {"Authorization": f"Bearer {token}"}
 
-    app = await client.post("/api/v1/apps", json={"slug": "field-app", "name": "Field App"}, headers=headers)
+    app = await client.post(
+        "/api/v1/apps", json={"slug": "field-app", "name": "Field App"}, headers=headers
+    )
     app_id = app.json()["id"]
 
     entity = await client.post(
@@ -158,7 +168,9 @@ async def test_cannot_delete_system_field(client: AsyncClient, builder_user: Use
     token = await _auth(client, builder_user.email, "Builder1234!")
     headers = {"Authorization": f"Bearer {token}"}
 
-    app = await client.post("/api/v1/apps", json={"slug": "sys-app", "name": "Sys App"}, headers=headers)
+    app = await client.post(
+        "/api/v1/apps", json={"slug": "sys-app", "name": "Sys App"}, headers=headers
+    )
     app_id = app.json()["id"]
     entity = await client.post(
         f"/api/v1/apps/{app_id}/entities",
@@ -181,7 +193,9 @@ async def test_create_relation(client: AsyncClient, builder_user: User) -> None:
     token = await _auth(client, builder_user.email, "Builder1234!")
     headers = {"Authorization": f"Bearer {token}"}
 
-    app = await client.post("/api/v1/apps", json={"slug": "rel-app", "name": "Rel App"}, headers=headers)
+    app = await client.post(
+        "/api/v1/apps", json={"slug": "rel-app", "name": "Rel App"}, headers=headers
+    )
     app_id = app.json()["id"]
 
     customer = await client.post(
@@ -222,33 +236,51 @@ async def test_two_relations_to_the_same_entity_pair_under_different_field_names
     token = await _auth(client, builder_user.email, "Builder1234!")
     headers = {"Authorization": f"Bearer {token}"}
 
-    app = await client.post("/api/v1/apps", json={"slug": "transfer-app", "name": "Transfer App"}, headers=headers)
+    app = await client.post(
+        "/api/v1/apps", json={"slug": "transfer-app", "name": "Transfer App"}, headers=headers
+    )
     app_id = app.json()["id"]
     transfer = await client.post(
-        f"/api/v1/apps/{app_id}/entities", json={"slug": "transfer", "display_name": "Transfer"}, headers=headers,
+        f"/api/v1/apps/{app_id}/entities",
+        json={"slug": "transfer", "display_name": "Transfer"},
+        headers=headers,
     )
     location = await client.post(
-        f"/api/v1/apps/{app_id}/entities", json={"slug": "location", "display_name": "Location"}, headers=headers,
+        f"/api/v1/apps/{app_id}/entities",
+        json={"slug": "location", "display_name": "Location"},
+        headers=headers,
     )
     body = {
-        "from_entity_id": transfer.json()["id"], "to_entity_id": location.json()["id"],
+        "from_entity_id": transfer.json()["id"],
+        "to_entity_id": location.json()["id"],
         "relation_type": "one_to_many",
     }
 
-    first = await client.post(f"/api/v1/apps/{app_id}/relations",
-                               json={**body, "from_field_name": "from_location"}, headers=headers)
+    first = await client.post(
+        f"/api/v1/apps/{app_id}/relations",
+        json={**body, "from_field_name": "from_location"},
+        headers=headers,
+    )
     assert first.status_code == 201
 
-    second = await client.post(f"/api/v1/apps/{app_id}/relations",
-                                json={**body, "from_field_name": "to_location"}, headers=headers)
+    second = await client.post(
+        f"/api/v1/apps/{app_id}/relations",
+        json={**body, "from_field_name": "to_location"},
+        headers=headers,
+    )
     assert second.status_code == 201
 
     # Re-creating the exact same relation (same field name) is still rejected.
-    dup = await client.post(f"/api/v1/apps/{app_id}/relations",
-                             json={**body, "from_field_name": "from_location"}, headers=headers)
+    dup = await client.post(
+        f"/api/v1/apps/{app_id}/relations",
+        json={**body, "from_field_name": "from_location"},
+        headers=headers,
+    )
     assert dup.status_code == 409
 
-    entity_resp = await client.get(f"/api/v1/apps/{app_id}/entities/{transfer.json()['id']}", headers=headers)
+    entity_resp = await client.get(
+        f"/api/v1/apps/{app_id}/entities/{transfer.json()['id']}", headers=headers
+    )
     field_names = {f["name"] for f in entity_resp.json()["fields"]}
     assert "from_location" in field_names
     assert "to_location" in field_names

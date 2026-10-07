@@ -1,4 +1,5 @@
 """SequenceService: atomic auto-number generation for document registrar fields."""
+
 from __future__ import annotations
 
 import uuid
@@ -24,13 +25,9 @@ class SequenceService:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
-    async def list_sequences(
-        self, app_id: uuid.UUID, entity_id: uuid.UUID
-    ) -> list[Sequence]:
+    async def list_sequences(self, app_id: uuid.UUID, entity_id: uuid.UUID) -> list[Sequence]:
         result = await self._db.execute(
-            select(Sequence).where(
-                Sequence.app_id == app_id, Sequence.entity_id == entity_id
-            )
+            select(Sequence).where(Sequence.app_id == app_id, Sequence.entity_id == entity_id)
         )
         return list(result.scalars())
 
@@ -49,9 +46,7 @@ class SequenceService:
             raise SequenceNotFoundError(str(sequence_id))
         return seq
 
-    async def get_sequence_by_field(
-        self, entity_id: uuid.UUID, field_name: str
-    ) -> Sequence | None:
+    async def get_sequence_by_field(self, entity_id: uuid.UUID, field_name: str) -> Sequence | None:
         result = await self._db.execute(
             select(Sequence).where(
                 Sequence.entity_id == entity_id,
@@ -149,9 +144,7 @@ class SequenceService:
         )
         row = result.one_or_none()
         if row is None:
-            raise SequenceNotFoundError(
-                f"No sequence for entity={entity_id} field={field_name}"
-            )
+            raise SequenceNotFoundError(f"No sequence for entity={entity_id} field={field_name}")
         value, prefix, suffix, padding = row
         numeric = str(value).zfill(padding) if padding > 0 else str(value)
         return f"{prefix}{numeric}{suffix}"

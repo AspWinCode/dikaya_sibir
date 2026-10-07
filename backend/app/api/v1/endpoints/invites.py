@@ -27,10 +27,13 @@ router = APIRouter(tags=["invites"])
 
 
 def _invalid() -> HTTPException:
-    return HTTPException(status_code=status.HTTP_410_GONE, detail="Invite link is invalid or expired")
+    return HTTPException(
+        status_code=status.HTTP_410_GONE, detail="Invite link is invalid or expired"
+    )
 
 
 # ---- Management: /apps/{app_id}/invite-links ----
+
 
 @router.post(
     "/apps/{app_id}/invite-links",
@@ -42,21 +45,23 @@ async def create_invite_link(
     app_id: uuid.UUID, body: InviteLinkCreate, current_user: AuthDep, db: DbDep
 ) -> InviteLinkCreated:
     try:
-        return await InviteService(db).create_link(
-            app_id, body, actor_id=current_user.user_id
-        )
+        return await InviteService(db).create_link(app_id, body, actor_id=current_user.user_id)
     except AppNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="App not found") from exc
     except AppPermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
 
-@router.get("/apps/{app_id}/invite-links", response_model=list[InviteLinkRead], summary="List active invite links")
-async def list_invite_links(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> list[InviteLinkRead]:
+@router.get(
+    "/apps/{app_id}/invite-links",
+    response_model=list[InviteLinkRead],
+    summary="List active invite links",
+)
+async def list_invite_links(
+    app_id: uuid.UUID, current_user: AuthDep, db: DbDep
+) -> list[InviteLinkRead]:
     try:
-        return await InviteService(db).list_links(
-            app_id, actor_id=current_user.user_id
-        )
+        return await InviteService(db).list_links(app_id, actor_id=current_user.user_id)
     except AppNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="App not found") from exc
     except AppPermissionError as exc:
@@ -72,9 +77,7 @@ async def revoke_invite_link(
     app_id: uuid.UUID, link_id: uuid.UUID, current_user: AuthDep, db: DbDep
 ) -> None:
     try:
-        await InviteService(db).revoke_link(
-            app_id, link_id, actor_id=current_user.user_id
-        )
+        await InviteService(db).revoke_link(app_id, link_id, actor_id=current_user.user_id)
     except AppNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="App not found") from exc
     except AppPermissionError as exc:
@@ -82,6 +85,7 @@ async def revoke_invite_link(
 
 
 # ---- Public flow: /invites/{token} ----
+
 
 @router.get("/invites/{token}", response_model=InvitePreview, summary="Preview invite (public)")
 @limiter.limit("30/minute")
@@ -92,10 +96,14 @@ async def preview_invite(token: str, request: Request, db: DbDep) -> InvitePrevi
         raise _invalid() from exc
 
 
-@router.post("/invites/{token}/accept", response_model=InviteAcceptResult, summary="Join app as current user")
+@router.post(
+    "/invites/{token}/accept", response_model=InviteAcceptResult, summary="Join app as current user"
+)
 async def accept_invite(token: str, current_user: AuthDep, db: DbDep) -> InviteAcceptResult:
     try:
-        return await InviteService(db).accept(token, current_user.user_id, actor_email=current_user.email)
+        return await InviteService(db).accept(
+            token, current_user.user_id, actor_email=current_user.email
+        )
     except InviteInvalidError as exc:
         raise _invalid() from exc
 
@@ -107,7 +115,9 @@ async def accept_invite(token: str, current_user: AuthDep, db: DbDep) -> InviteA
     summary="Register a new account via invite link and join the app",
 )
 @limiter.limit("5/minute")
-async def signup_via_invite(token: str, body: InviteSignupRequest, request: Request, db: DbDep) -> TokenPair:
+async def signup_via_invite(
+    token: str, body: InviteSignupRequest, request: Request, db: DbDep
+) -> TokenPair:
     try:
         return await InviteService(db).signup(
             token,
@@ -118,8 +128,14 @@ async def signup_via_invite(token: str, body: InviteSignupRequest, request: Requ
     except InviteInvalidError as exc:
         raise _invalid() from exc
     except InviteSignupDisabledError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Signup via this link is disabled") from exc
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Signup via this link is disabled"
+        ) from exc
     except InviteConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered") from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
+        ) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc

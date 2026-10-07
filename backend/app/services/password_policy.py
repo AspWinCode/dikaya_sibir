@@ -1,4 +1,5 @@
 """Password policy: persistence, history checks, expiry management."""
+
 import uuid
 from datetime import UTC, datetime, timedelta
 

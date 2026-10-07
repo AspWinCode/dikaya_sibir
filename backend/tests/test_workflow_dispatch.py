@@ -6,6 +6,7 @@ bug found while auditing sandbox worker isolation: on_enter/on_exit/
 transition actions collected `notify`/`call_webhook` payloads that were
 returned in the API response but never dispatched anywhere.
 """
+
 import uuid
 from unittest.mock import patch
 
@@ -26,8 +27,10 @@ def _instance() -> WorkflowInstance:
 
 class TestDispatchSideEffects:
     def test_empty_lists_dispatch_nothing(self) -> None:
-        with patch("app.worker.tasks.notifications.send_email.apply_async") as email_mock, \
-             patch("app.worker.tasks.notifications.deliver_rule_webhook.apply_async") as hook_mock:
+        with (
+            patch("app.worker.tasks.notifications.send_email.apply_async") as email_mock,
+            patch("app.worker.tasks.notifications.deliver_rule_webhook.apply_async") as hook_mock,
+        ):
             WorkflowService._dispatch_side_effects(_instance(), [], [])
         email_mock.assert_not_called()
         hook_mock.assert_not_called()
@@ -36,7 +39,14 @@ class TestDispatchSideEffects:
         with patch("app.worker.tasks.notifications.send_email.apply_async") as email_mock:
             WorkflowService._dispatch_side_effects(
                 _instance(),
-                [{"to": "user@example.com", "subject": "Hi", "template": "Hello {{name}}", "context": {"name": "A"}}],
+                [
+                    {
+                        "to": "user@example.com",
+                        "subject": "Hi",
+                        "template": "Hello {{name}}",
+                        "context": {"name": "A"},
+                    }
+                ],
                 [],
             )
         email_mock.assert_called_once()
@@ -54,7 +64,9 @@ class TestDispatchSideEffects:
         instance = _instance()
         with patch("app.worker.tasks.notifications.deliver_rule_webhook.apply_async") as hook_mock:
             WorkflowService._dispatch_side_effects(
-                instance, [], [{"url": "https://hooks.example.com/x", "method": "POST", "payload": {"a": 1}}]
+                instance,
+                [],
+                [{"url": "https://hooks.example.com/x", "method": "POST", "payload": {"a": 1}}],
             )
         hook_mock.assert_called_once()
         kwargs = hook_mock.call_args.kwargs["kwargs"]
@@ -66,7 +78,9 @@ class TestDispatchSideEffects:
 
     def test_webhook_without_url_is_skipped(self) -> None:
         with patch("app.worker.tasks.notifications.deliver_rule_webhook.apply_async") as hook_mock:
-            WorkflowService._dispatch_side_effects(_instance(), [], [{"method": "POST", "payload": {}}])
+            WorkflowService._dispatch_side_effects(
+                _instance(), [], [{"method": "POST", "payload": {}}]
+            )
         hook_mock.assert_not_called()
 
     def test_multiple_webhooks_all_queued(self) -> None:

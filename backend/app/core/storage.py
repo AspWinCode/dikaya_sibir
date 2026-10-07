@@ -1,4 +1,5 @@
 """Async S3/MinIO wrapper using boto3 + asyncio.to_thread."""
+
 import asyncio
 import uuid
 from functools import lru_cache
@@ -59,7 +60,9 @@ class S3Storage:
         await asyncio.to_thread(self._s3.delete_object, Bucket=bucket, Key=key)
 
     @staticmethod
-    def make_key(app_id: uuid.UUID, entity_id: uuid.UUID, record_id: uuid.UUID, filename: str) -> str:
+    def make_key(
+        app_id: uuid.UUID, entity_id: uuid.UUID, record_id: uuid.UUID, filename: str
+    ) -> str:
         """Deterministic S3 key: files/{app}/{entity}/{record}/{uuid}_{filename}"""
         safe = filename.replace("/", "_").replace("..", "_")
         return f"files/{app_id}/{entity_id}/{record_id}/{uuid.uuid4()}_{safe}"

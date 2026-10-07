@@ -1,4 +1,5 @@
 """File policy: platform-wide upload limits (ТЗ 3.7.1 / Приложение A)."""
+
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -8,9 +9,22 @@ from app.models.identity import FilePolicy
 from app.schemas.auth import FilePolicyUpdate
 
 DEFAULT_ALLOWED_EXTENSIONS = [
-    "pdf", "docx", "xlsx", "pptx", "odt", "txt", "rtf",
-    "jpg", "jpeg", "png", "gif", "webp", "svg",
-    "zip", "rar", "7z",
+    "pdf",
+    "docx",
+    "xlsx",
+    "pptx",
+    "odt",
+    "txt",
+    "rtf",
+    "jpg",
+    "jpeg",
+    "png",
+    "gif",
+    "webp",
+    "svg",
+    "zip",
+    "rar",
+    "7z",
 ]
 
 

@@ -5,15 +5,12 @@ Unit:  HMAC signing, event pattern matching, secret generation.
 Integration: webhook subscription CRUD, rotate_secret, delivery history,
              OutboxWriter.
 """
+
 import hashlib
 import hmac
-import json
 import uuid
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.http_client import (
     compute_signature,
     generate_secret,
@@ -23,11 +20,13 @@ from app.core.http_client import (
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
 from app.services.integration import OutboxWriter
-
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ==================================================================
 # Unit: HMAC + event matching
 # ==================================================================
+
 
 class TestComputeSignature:
     def test_format(self) -> None:
@@ -114,6 +113,7 @@ class TestSubscriptionMatches:
 # Fixtures
 # ==================================================================
 
+
 @pytest.fixture()
 async def builder(db_session: AsyncSession) -> User:
     for role_id in ("app_builder",):
@@ -152,6 +152,7 @@ async def _setup_app(client: AsyncClient, token: str) -> str:
 # Integration: subscription CRUD
 # ==================================================================
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_create_webhook(client: AsyncClient, builder: User) -> None:
@@ -172,7 +173,7 @@ async def test_create_webhook(client: AsyncClient, builder: User) -> None:
     data = resp.json()
     assert data["name"] == "My Webhook"
     assert data["is_active"] is True
-    assert "secret" in data           # shown only on creation
+    assert "secret" in data  # shown only on creation
     assert len(data["secret"]) == 64  # 32 bytes hex
     assert data["events"] == ["record.*", "workflow.transitioned"]
 
@@ -220,11 +221,13 @@ async def test_update_webhook(client: AsyncClient, builder: User) -> None:
     headers = {"Authorization": f"Bearer {token}"}
     base = f"/api/v1/apps/{app_id}/webhooks"
 
-    sub = (await client.post(
-        base,
-        json={"name": "Old", "target_url": "https://a.com/h"},
-        headers=headers,
-    )).json()
+    sub = (
+        await client.post(
+            base,
+            json={"name": "Old", "target_url": "https://a.com/h"},
+            headers=headers,
+        )
+    ).json()
 
     resp = await client.patch(
         f"{base}/{sub['id']}",
@@ -245,9 +248,11 @@ async def test_delete_webhook(client: AsyncClient, builder: User) -> None:
     headers = {"Authorization": f"Bearer {token}"}
     base = f"/api/v1/apps/{app_id}/webhooks"
 
-    sub = (await client.post(
-        base, json={"name": "Del", "target_url": "https://a.com/h"}, headers=headers
-    )).json()
+    sub = (
+        await client.post(
+            base, json={"name": "Del", "target_url": "https://a.com/h"}, headers=headers
+        )
+    ).json()
 
     assert (await client.delete(f"{base}/{sub['id']}", headers=headers)).status_code == 204
     assert (await client.get(f"{base}/{sub['id']}", headers=headers)).status_code == 404
@@ -260,9 +265,7 @@ async def test_webhook_not_found(client: AsyncClient, builder: User) -> None:
     app_id = await _setup_app(client, token)
     headers = {"Authorization": f"Bearer {token}"}
 
-    resp = await client.get(
-        f"/api/v1/apps/{app_id}/webhooks/{uuid.uuid4()}", headers=headers
-    )
+    resp = await client.get(f"/api/v1/apps/{app_id}/webhooks/{uuid.uuid4()}", headers=headers)
     assert resp.status_code == 404
 
 
@@ -274,16 +277,18 @@ async def test_active_only_filter(client: AsyncClient, builder: User) -> None:
     headers = {"Authorization": f"Bearer {token}"}
     base = f"/api/v1/apps/{app_id}/webhooks"
 
-    active = (await client.post(
-        base, json={"name": "Active", "target_url": "https://a.com/1"}, headers=headers
-    )).json()
-    inactive = (await client.post(
-        base, json={"name": "Inactive", "target_url": "https://a.com/2"}, headers=headers
-    )).json()
+    active = (
+        await client.post(
+            base, json={"name": "Active", "target_url": "https://a.com/1"}, headers=headers
+        )
+    ).json()
+    inactive = (
+        await client.post(
+            base, json={"name": "Inactive", "target_url": "https://a.com/2"}, headers=headers
+        )
+    ).json()
 
-    await client.patch(
-        f"{base}/{inactive['id']}", json={"is_active": False}, headers=headers
-    )
+    await client.patch(f"{base}/{inactive['id']}", json={"is_active": False}, headers=headers)
 
     resp = await client.get(f"{base}?active_only=true", headers=headers)
     assert resp.status_code == 200
@@ -295,6 +300,7 @@ async def test_active_only_filter(client: AsyncClient, builder: User) -> None:
 # ==================================================================
 # Integration: rotate_secret
 # ==================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -326,9 +332,11 @@ async def test_delivery_history_empty(client: AsyncClient, builder: User) -> Non
     headers = {"Authorization": f"Bearer {token}"}
     base = f"/api/v1/apps/{app_id}/webhooks"
 
-    sub = (await client.post(
-        base, json={"name": "D", "target_url": "https://a.com/h"}, headers=headers
-    )).json()
+    sub = (
+        await client.post(
+            base, json={"name": "D", "target_url": "https://a.com/h"}, headers=headers
+        )
+    ).json()
 
     resp = await client.get(f"{base}/{sub['id']}/deliveries", headers=headers)
     assert resp.status_code == 200
@@ -338,6 +346,7 @@ async def test_delivery_history_empty(client: AsyncClient, builder: User) -> Non
 # ==================================================================
 # Integration: schema validation
 # ==================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -373,6 +382,7 @@ async def test_empty_events_list_rejected(client: AsyncClient, builder: User) ->
 # Unit: OutboxWriter (DB)
 # ==================================================================
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_outbox_writer_publishes(db_session: AsyncSession) -> None:
@@ -389,9 +399,7 @@ async def test_outbox_writer_publishes(db_session: AsyncSession) -> None:
     )
     await db_session.flush()
 
-    result = await db_session.execute(
-        select(Outbox).where(Outbox.id == entry.id)
-    )
+    result = await db_session.execute(select(Outbox).where(Outbox.id == entry.id))
     row = result.scalar_one()
     assert row.event_type == "record.created"
     assert row.status == "pending"

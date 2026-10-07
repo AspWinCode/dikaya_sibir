@@ -1,16 +1,15 @@
 """Tests for GET /audit — requires platform_admin."""
+
 from __future__ import annotations
 
 import uuid
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
 from app.services.audit import AuditService
-
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ------------------------------------------------------------------
 # Fixtures
@@ -74,9 +73,7 @@ async def test_audit_requires_auth(client: AsyncClient) -> None:
 
 
 @pytest.mark.anyio
-async def test_audit_forbidden_for_regular_user(
-    client: AsyncClient, regular_user: User
-) -> None:
+async def test_audit_forbidden_for_regular_user(client: AsyncClient, regular_user: User) -> None:
     token = await _login(client, "audit_user@example.com", "User1234!")
     r = await client.get("/api/v1/audit", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 403
@@ -86,8 +83,9 @@ async def test_audit_forbidden_for_regular_user(
 async def test_audit_returns_list_for_admin(
     client: AsyncClient, admin: User, db_session: AsyncSession
 ) -> None:
-    await _seed_log(db_session, admin.id, "test.action", resource_type="record",
-                    resource_id=str(uuid.uuid4()))
+    await _seed_log(
+        db_session, admin.id, "test.action", resource_type="record", resource_id=str(uuid.uuid4())
+    )
     token = await _login(client, "audit_admin@example.com", "Admin1234!")
     r = await client.get("/api/v1/audit", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
@@ -152,8 +150,14 @@ async def test_audit_entry_schema(
 ) -> None:
     resource_id = str(uuid.uuid4())
     unique_action = f"schema.check.{uuid.uuid4().hex[:6]}"
-    await _seed_log(db_session, admin.id, unique_action, resource_type="record",
-                    resource_id=resource_id, level="info")
+    await _seed_log(
+        db_session,
+        admin.id,
+        unique_action,
+        resource_type="record",
+        resource_id=resource_id,
+        level="info",
+    )
     token = await _login(client, "audit_admin@example.com", "Admin1234!")
     r = await client.get(
         f"/api/v1/audit?action={unique_action}",

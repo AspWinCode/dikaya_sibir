@@ -1,4 +1,5 @@
 """Rule schemas + typed AST validation."""
+
 import uuid
 from datetime import datetime
 from enum import Enum
@@ -6,14 +7,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-
 # ------------------------------------------------------------------
 # Trigger
 # ------------------------------------------------------------------
 
+
 class RuleType(str, Enum):
     AUTOMATION = "automation"
-    AUTOFILL   = "autofill"
+    AUTOFILL = "autofill"
     VALIDATION = "validation"
 
 
@@ -21,13 +22,14 @@ class TriggerEvent(str, Enum):
     RECORD_CREATED = "record.created"
     RECORD_UPDATED = "record.updated"
     RECORD_DELETED = "record.deleted"
-    FIELD_CHANGED  = "field.changed"
-    SCHEDULE       = "schedule"
+    FIELD_CHANGED = "field.changed"
+    SCHEDULE = "schedule"
 
 
 class ScheduleKind(str, Enum):
-    CRON = "cron"                    # calendar tick, e.g. "monthly on the 1st" (ТЗ: ежемесячная амортизация)
-    RELATIVE_DATE = "relative_date"  # N days before/after a per-record date field (ТЗ: напоминание за 3 дня до срока)
+    CRON = "cron"  # calendar tick, e.g. "monthly on the 1st" (ТЗ: ежемесячная амортизация)
+    # N days before/after a per-record date field (ТЗ: напоминание за 3 дня до срока)
+    RELATIVE_DATE = "relative_date"
 
 
 class CronSchedule(BaseModel):
@@ -35,6 +37,7 @@ class CronSchedule(BaseModel):
     app/worker/tasks/rules_schedule.py), so `minute` only matters as
     "0" (fires on the hour) vs anything else (never fires) — sub-hour
     granularity isn't supported."""
+
     minute: str = "0"
     hour: str = "0"
     day_of_month: str = "*"
@@ -45,9 +48,10 @@ class CronSchedule(BaseModel):
 class RelativeDateSchedule(BaseModel):
     date_field: str = Field(min_length=1, max_length=128)
     offset_days: int = Field(
-        ge=-365, le=365,
+        ge=-365,
+        le=365,
         description="Negative = before the date (a reminder), positive = after. "
-                     "-3 fires once when today == date_field - 3 days.",
+        "-3 fires once when today == date_field - 3 days.",
     )
 
 
@@ -69,11 +73,18 @@ class RuleTrigger(BaseModel):
                     raise ValueError("trigger.cron is required when schedule_kind='cron'")
             elif self.schedule_kind == ScheduleKind.RELATIVE_DATE:
                 if not self.relative_date:
-                    raise ValueError("trigger.relative_date is required when schedule_kind='relative_date'")
+                    raise ValueError(
+                        "trigger.relative_date is required when schedule_kind='relative_date'"
+                    )
             else:
-                raise ValueError("trigger.schedule_kind ('cron' or 'relative_date') is required when event='schedule'")
+                raise ValueError(
+                    "trigger.schedule_kind ('cron' or 'relative_date') is required "
+                    "when event='schedule'"
+                )
         elif self.schedule_kind or self.cron or self.relative_date:
-            raise ValueError("schedule_kind/cron/relative_date are only valid when event='schedule'")
+            raise ValueError(
+                "schedule_kind/cron/relative_date are only valid when event='schedule'"
+            )
         return self
 
 
@@ -81,21 +92,22 @@ class RuleTrigger(BaseModel):
 # Condition AST
 # ------------------------------------------------------------------
 
+
 class CompareOp(str, Enum):
-    EQ          = "eq"
-    NE          = "ne"
-    GT          = "gt"
-    GTE         = "gte"
-    LT          = "lt"
-    LTE         = "lte"
-    CONTAINS    = "contains"
-    ICONTAINS   = "icontains"
-    IN          = "in"
-    NIN         = "nin"
-    IS_NULL     = "is_null"
+    EQ = "eq"
+    NE = "ne"
+    GT = "gt"
+    GTE = "gte"
+    LT = "lt"
+    LTE = "lte"
+    CONTAINS = "contains"
+    ICONTAINS = "icontains"
+    IN = "in"
+    NIN = "nin"
+    IS_NULL = "is_null"
     IS_NOT_NULL = "is_not_null"
     STARTS_WITH = "starts_with"
-    ENDS_WITH   = "ends_with"
+    ENDS_WITH = "ends_with"
 
 
 class CompareCondition(BaseModel):
@@ -118,6 +130,7 @@ LogicalCondition.model_rebuild()
 # Expression AST
 # ------------------------------------------------------------------
 
+
 class LiteralExpr(BaseModel):
     type: Literal["literal"]
     value: Any
@@ -129,12 +142,12 @@ class FieldRefExpr(BaseModel):
 
 
 class MathOp(str, Enum):
-    ADD      = "add"
+    ADD = "add"
     SUBTRACT = "subtract"
     MULTIPLY = "multiply"
-    DIVIDE   = "divide"
-    MODULO   = "modulo"
-    POWER    = "power"
+    DIVIDE = "divide"
+    MODULO = "modulo"
+    POWER = "power"
 
 
 class MathExpr(BaseModel):
@@ -152,11 +165,11 @@ class FuncExpr(BaseModel):
 
 class LookupAgg(str, Enum):
     VALUE = "value"  # first matching record's field
-    SUM   = "sum"
+    SUM = "sum"
     COUNT = "count"
-    AVG   = "avg"
-    MIN   = "min"
-    MAX   = "max"
+    AVG = "avg"
+    MIN = "min"
+    MAX = "max"
 
 
 class LookupExpr(BaseModel):
@@ -169,6 +182,7 @@ class LookupExpr(BaseModel):
     Only used inside a validation rule's condition/action value — the main
     interpreter's pure evaluate() never sees an unresolved "lookup" node,
     see app/engine/lookup.py."""
+
     type: Literal["lookup"]
     entity_id: uuid.UUID
     filter: dict[str, Any] = Field(default_factory=dict)
@@ -185,6 +199,7 @@ FuncExpr.model_rebuild()
 # Action AST
 # ------------------------------------------------------------------
 
+
 class SetFieldAction(BaseModel):
     type: Literal["set_field"]
     field: str
@@ -200,6 +215,7 @@ class CreateRecordAction(BaseModel):
     building block for "running balance" entities (e.g. a Product×Location
     stock table fed by receipt/transfer records) without a bespoke action
     type or app-specific code — see ТЗ item 13."""
+
     type: Literal["create_record"]
     entity_id: uuid.UUID
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -242,6 +258,7 @@ class BlockSaveAction(BaseModel):
     `message`. Only meaningful on a rule_type="validation" rule — see
     app/services/validation_rules.py, which runs these synchronously
     *before* the record is written, unlike every other action here."""
+
     type: Literal["block_save"]
     message: str = Field(default="Сохранение отклонено правилом проверки", max_length=500)
 
@@ -261,6 +278,7 @@ ActionNode = (
 # ------------------------------------------------------------------
 # Rule schemas
 # ------------------------------------------------------------------
+
 
 class RuleRead(BaseModel):
     id: uuid.UUID
@@ -316,6 +334,7 @@ class RuleUpdate(BaseModel):
 
 class RuleTestRequest(BaseModel):
     """Dry-run a rule against a sample record payload without persisting changes."""
+
     record_payload: dict[str, Any]
     event: str = "record.updated"
     changed_fields: list[str] = Field(default_factory=list)
@@ -383,8 +402,14 @@ class RuleWebhookDeliveryRead(BaseModel):
 
 _VALID_CONDITION_TYPES = {"and", "or", "not", "compare"}
 _VALID_ACTION_TYPES = {
-    "set_field", "create_record", "update_record", "delete_record",
-    "send_notification", "call_webhook", "stop", "block_save",
+    "set_field",
+    "create_record",
+    "update_record",
+    "delete_record",
+    "send_notification",
+    "call_webhook",
+    "stop",
+    "block_save",
 }
 _VALID_EXPR_TYPES = {"literal", "field_ref", "math", "func", "lookup"}
 _VALID_LOOKUP_AGGS = {"value", "sum", "count", "avg", "min", "max"}
@@ -442,7 +467,7 @@ def _validate_rule_type_actions(rule_type: "RuleType", actions: list[dict[str, A
         if actions and not all(a.get("type") == "block_save" for a in actions):
             raise ValueError("A validation rule's actions may only be block_save")
     elif has_block_save:
-        raise ValueError("block_save is only valid on a validation rule (rule_type=\"validation\")")
+        raise ValueError('block_save is only valid on a validation rule (rule_type="validation")')
 
 
 def _validate_action_node(node: Any) -> None:
@@ -495,7 +520,9 @@ class ProcessStepsReorder(BaseModel):
     step_ids: list[str] = Field(min_length=0)
 
 
-def step_to_node(type_: str, config: dict[str, Any] | None, step_id: str | None = None) -> dict[str, Any]:
+def step_to_node(
+    type_: str, config: dict[str, Any] | None, step_id: str | None = None
+) -> dict[str, Any]:
     """Flatten a (type, config) step into a stored action node with a stable id."""
     node = {k: v for k, v in (config or {}).items() if k not in _STEP_RESERVED_KEYS}
     node["type"] = type_

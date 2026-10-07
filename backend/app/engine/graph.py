@@ -8,10 +8,10 @@ A rule depends on another if:
 We model this as a directed graph: rule_id → [rule_ids that this rule could trigger].
 Tarjan SCC identifies cycles (SCCs with size > 1, or self-loops).
 """
+
 from __future__ import annotations
 
-import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -19,10 +19,10 @@ from typing import Any
 class RuleNode:
     rule_id: str
     entity_id: str
-    trigger_event: str          # e.g. "record.created"
-    trigger_fields: list[str]   # for "field.changed" events
+    trigger_event: str  # e.g. "record.created"
+    trigger_fields: list[str]  # for "field.changed" events
     action_entity_ids: list[str]  # entities written by actions
-    action_events: list[str]    # events emitted by actions
+    action_events: list[str]  # events emitted by actions
 
 
 def build_dependency_graph(rules: list[RuleNode]) -> dict[str, list[str]]:
@@ -48,6 +48,7 @@ def build_dependency_graph(rules: list[RuleNode]) -> dict[str, list[str]]:
 # ------------------------------------------------------------------
 # Tarjan SCC — iterative (no Python recursion limit risk)
 # ------------------------------------------------------------------
+
 
 def tarjan_scc(graph: dict[str, list[str]]) -> list[list[str]]:
     """
@@ -108,7 +109,8 @@ def tarjan_scc(graph: dict[str, list[str]]) -> list[list[str]]:
 def find_cycles(graph: dict[str, list[str]]) -> list[list[str]]:
     """Return only SCCs that constitute a cycle (size > 1 or self-loop)."""
     return [
-        scc for scc in tarjan_scc(graph)
+        scc
+        for scc in tarjan_scc(graph)
         if len(scc) > 1 or (len(scc) == 1 and scc[0] in graph.get(scc[0], []))
     ]
 
@@ -132,12 +134,14 @@ def extract_rule_nodes(rules_raw: list[dict[str, Any]]) -> list[RuleNode]:
                     "record.created" if atype == "create_record" else "record.updated"
                 )
 
-        nodes.append(RuleNode(
-            rule_id=str(r["id"]),
-            entity_id=str(r.get("entity_id", "")),
-            trigger_event=trigger.get("event", ""),
-            trigger_fields=trigger.get("watch_fields", []),
-            action_entity_ids=action_entity_ids,
-            action_events=action_events,
-        ))
+        nodes.append(
+            RuleNode(
+                rule_id=str(r["id"]),
+                entity_id=str(r.get("entity_id", "")),
+                trigger_event=trigger.get("event", ""),
+                trigger_fields=trigger.get("watch_fields", []),
+                action_entity_ids=action_entity_ids,
+                action_events=action_events,
+            )
+        )
     return nodes

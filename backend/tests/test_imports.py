@@ -4,19 +4,18 @@ Import (CSV/XLSX) tests.
 Unit tests: parser logic (pure, no DB).
 Integration tests: POST /import endpoint creates records via RecordService.
 """
+
 from __future__ import annotations
 
 import io
 import uuid
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
-from app.services.imports import ImportError, ImportService
-
+from app.services.imports import ImportService, ImportValidationError
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ------------------------------------------------------------------
 # Fixtures
@@ -50,7 +49,8 @@ async def _setup_entity(client: AsyncClient, token: str) -> tuple[str, str]:
     slug = f"import-app-{uuid.uuid4().hex[:6]}"
     headers = {"Authorization": f"Bearer {token}"}
     app = await client.post(
-        "/api/v1/apps", json={"slug": slug, "name": "Import Test App"},
+        "/api/v1/apps",
+        json={"slug": slug, "name": "Import Test App"},
         headers=headers,
     )
     app_id = app.json()["id"]
@@ -106,7 +106,7 @@ class TestCsvParser:
 
 
 # ------------------------------------------------------------------
-# Unit: unsupported file type raises ImportError
+# Unit: unsupported file type raises ImportValidationError
 # ------------------------------------------------------------------
 
 
@@ -114,10 +114,12 @@ class TestUnsupportedType:
     @pytest.mark.asyncio
     async def test_unsupported_extension_raises(self, db_session: AsyncSession) -> None:
         svc = ImportService(db_session)
-        with pytest.raises(ImportError, match="Unsupported file type"):
+        with pytest.raises(ImportValidationError, match="Unsupported file type"):
             await svc.import_records(
-                uuid.uuid4(), uuid.uuid4(),
-                b"some data", "file.pdf",
+                uuid.uuid4(),
+                uuid.uuid4(),
+                b"some data",
+                "file.pdf",
             )
 
 
@@ -135,9 +137,7 @@ class TestImportServiceUnit:
         # error rather than a skip.
         csv_data = b"name,email\n,\n"
         svc = ImportService(db_session)
-        result = await svc.import_records(
-            uuid.uuid4(), uuid.uuid4(), csv_data, "data.csv"
-        )
+        result = await svc.import_records(uuid.uuid4(), uuid.uuid4(), csv_data, "data.csv")
         assert result.total == 1
         assert result.skipped == 1
         assert result.created == 0
@@ -149,7 +149,10 @@ class TestImportServiceUnit:
         svc = ImportService(db_session)
         # The entity doesn't exist → RecordService will fail validation, we check error row
         result = await svc.import_records(
-            uuid.uuid4(), uuid.uuid4(), csv_data, "data.csv",
+            uuid.uuid4(),
+            uuid.uuid4(),
+            csv_data,
+            "data.csv",
             column_map={"Full Name": "name", "E-mail": "email"},
         )
         # total=1, created=0 (entity not in DB → error), errors has the row
@@ -302,25 +305,34 @@ class TestImportLimits:
         # Both checks below raise before any DB access, so — like TestCsvParser
         # — a real session isn't needed.
         import app.services.imports as imports_module
-        monkeypatch.setattr(imports_module, "MAX_IMPORT_FILE_SIZE", 10)  # 10 bytes, avoids allocating 50MB in a test
+
+        monkeypatch.setattr(
+            imports_module, "MAX_IMPORT_FILE_SIZE", 10
+        )  # 10 bytes, avoids allocating 50MB in a test
 
         svc = ImportService(None)  # type: ignore[arg-type]
-        with pytest.raises(ImportError, match="exceeds the maximum import size"):
-            await svc.import_records(uuid.uuid4(), uuid.uuid4(), b"name,email\nAlice,a@b.com\n", "data.csv")
+        with pytest.raises(ImportValidationError, match="exceeds the maximum import size"):
+            await svc.import_records(
+                uuid.uuid4(), uuid.uuid4(), b"name,email\nAlice,a@b.com\n", "data.csv"
+            )
 
     @pytest.mark.asyncio
     async def test_row_count_over_limit_rejected(self, monkeypatch) -> None:
         import app.services.imports as imports_module
+
         monkeypatch.setattr(imports_module, "MAX_IMPORT_ROWS", 2)
 
         csv_content = b"name\nA\nB\nC\n"  # 3 rows > limit of 2
         svc = ImportService(None)  # type: ignore[arg-type]
-        with pytest.raises(ImportError, match="exceeding the limit of 2"):
+        with pytest.raises(ImportValidationError, match="exceeding the limit of 2"):
             await svc.import_records(uuid.uuid4(), uuid.uuid4(), csv_content, "data.csv")
 
     @pytest.mark.asyncio
-    async def test_row_count_at_limit_is_allowed(self, db_session: AsyncSession, monkeypatch) -> None:
+    async def test_row_count_at_limit_is_allowed(
+        self, db_session: AsyncSession, monkeypatch
+    ) -> None:
         import app.services.imports as imports_module
+
         monkeypatch.setattr(imports_module, "MAX_IMPORT_ROWS", 2)
 
         csv_content = b"name\nA\nB\n"  # exactly 2 rows == limit
@@ -333,8 +345,11 @@ class TestImportLimits:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_import_file_size_limit_returns_400(client: AsyncClient, builder: User, monkeypatch) -> None:
+async def test_import_file_size_limit_returns_400(
+    client: AsyncClient, builder: User, monkeypatch
+) -> None:
     import app.services.imports as imports_module
+
     monkeypatch.setattr(imports_module, "MAX_IMPORT_FILE_SIZE", 10)
 
     token = await _login(client, builder.email, "Build1234!")
@@ -357,7 +372,9 @@ async def test_import_file_size_limit_returns_400(client: AsyncClient, builder: 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_abort_mode_rolls_back_valid_rows_when_one_fails(client: AsyncClient, builder: User) -> None:
+async def test_abort_mode_rolls_back_valid_rows_when_one_fails(
+    client: AsyncClient, builder: User
+) -> None:
     token = await _login(client, builder.email, "Build1234!")
     app_id, entity_id = await _setup_entity(client, token)
     headers = {"Authorization": f"Bearer {token}"}
@@ -383,14 +400,17 @@ async def test_abort_mode_rolls_back_valid_rows_when_one_fails(client: AsyncClie
 
     # Nothing was actually persisted — not even Alice, who was individually valid.
     list_resp = await client.get(
-        f"/api/v1/apps/{app_id}/entities/{entity_id}/records", headers=headers,
+        f"/api/v1/apps/{app_id}/entities/{entity_id}/records",
+        headers=headers,
     )
     assert list_resp.json()["items"] == []
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_abort_mode_succeeds_when_all_rows_are_valid(client: AsyncClient, builder: User) -> None:
+async def test_abort_mode_succeeds_when_all_rows_are_valid(
+    client: AsyncClient, builder: User
+) -> None:
     token = await _login(client, builder.email, "Build1234!")
     app_id, entity_id = await _setup_entity(client, token)
     headers = {"Authorization": f"Bearer {token}"}
@@ -440,13 +460,15 @@ async def test_upsert_updates_existing_record_by_key(client: AsyncClient, builde
     assert data["updated"] == 1
 
     get_resp = await client.get(
-        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{rec_id}", headers=headers,
+        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{rec_id}",
+        headers=headers,
     )
     assert get_resp.json()["payload"]["score"] == "99"
 
     # No duplicate was created alongside the update.
     list_resp = await client.get(
-        f"/api/v1/apps/{app_id}/entities/{entity_id}/records", headers=headers,
+        f"/api/v1/apps/{app_id}/entities/{entity_id}/records",
+        headers=headers,
     )
     assert len(list_resp.json()["items"]) == 1
 
@@ -473,7 +495,9 @@ async def test_upsert_creates_when_no_existing_match(client: AsyncClient, builde
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_upsert_does_not_match_soft_deleted_records(client: AsyncClient, builder: User) -> None:
+async def test_upsert_does_not_match_soft_deleted_records(
+    client: AsyncClient, builder: User
+) -> None:
     """A key match against a soft-deleted record should create a new record,
     not resurrect/overwrite the deleted one."""
     token = await _login(client, builder.email, "Build1234!")
@@ -487,7 +511,8 @@ async def test_upsert_does_not_match_soft_deleted_records(client: AsyncClient, b
     )
     rec_id = create.json()["id"]
     await client.delete(
-        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{rec_id}", headers=headers,
+        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{rec_id}",
+        headers=headers,
     )
 
     csv_content = b"name,score\nDave,50\n"

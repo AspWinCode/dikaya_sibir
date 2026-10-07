@@ -5,8 +5,8 @@ assert_url_is_safe / deliver / send_webhook refuse private, loopback,
 link-local (incl. the 169.254.169.254 cloud metadata address), and
 non-http(s) targets before any request is attempted.
 """
-import pytest
 
+import pytest
 from app.core.http_client import UnsafeUrlError, assert_url_is_safe, deliver, send_webhook
 
 

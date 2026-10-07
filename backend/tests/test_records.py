@@ -1,15 +1,15 @@
 """Record CRUD + filter engine integration tests."""
-import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
+import pytest
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
-
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ------------------------------------------------------------------
 # Fixtures
 # ------------------------------------------------------------------
+
 
 @pytest.fixture()
 async def builder(db_session: AsyncSession) -> User:
@@ -37,9 +37,11 @@ async def _login(client: AsyncClient, email: str, pwd: str) -> str:
 async def _setup_entity(client: AsyncClient, token: str) -> tuple[str, str]:
     """Create an app + entity, return (app_id, entity_id)."""
     import uuid
+
     slug = f"rec-app-{uuid.uuid4().hex[:6]}"
     app = await client.post(
-        "/api/v1/apps", json={"slug": slug, "name": "Record Test App"},
+        "/api/v1/apps",
+        json={"slug": slug, "name": "Record Test App"},
         headers={"Authorization": f"Bearer {token}"},
     )
     app_id = app.json()["id"]
@@ -55,8 +57,12 @@ async def _setup_entity(client: AsyncClient, token: str) -> tuple[str, str]:
     for field in [
         {"name": "title", "display_name": "Title", "field_type": "text", "is_required": True},
         {"name": "amount", "display_name": "Amount", "field_type": "decimal"},
-        {"name": "status", "display_name": "Status", "field_type": "select",
-         "field_options": {"choices": [{"value": "draft"}, {"value": "paid"}]}},
+        {
+            "name": "status",
+            "display_name": "Status",
+            "field_type": "select",
+            "field_options": {"choices": [{"value": "draft"}, {"value": "paid"}]},
+        },
     ]:
         await client.post(
             f"/api/v1/apps/{app_id}/entities/{entity_id}/fields",
@@ -70,6 +76,7 @@ async def _setup_entity(client: AsyncClient, token: str) -> tuple[str, str]:
 # ------------------------------------------------------------------
 # Record CRUD
 # ------------------------------------------------------------------
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -107,9 +114,12 @@ async def test_select_field_with_string_choices(client: AsyncClient, builder: Us
     headers = {"Authorization": f"Bearer {token}"}
 
     import uuid
+
     slug = f"rec-app-{uuid.uuid4().hex[:6]}"
     app = await client.post(
-        "/api/v1/apps", json={"slug": slug, "name": "String Choices App"}, headers=headers,
+        "/api/v1/apps",
+        json={"slug": slug, "name": "String Choices App"},
+        headers=headers,
     )
     app_id = app.json()["id"]
     entity = await client.post(
@@ -121,7 +131,9 @@ async def test_select_field_with_string_choices(client: AsyncClient, builder: Us
     await client.post(
         f"/api/v1/apps/{app_id}/entities/{entity_id}/fields",
         json={
-            "name": "position", "display_name": "Position", "field_type": "select",
+            "name": "position",
+            "display_name": "Position",
+            "field_type": "select",
             "field_options": {"choices": ["Мастер", "Стажёр"]},
         },
         headers=headers,
@@ -224,6 +236,7 @@ async def test_restore_deleted_record(client: AsyncClient, builder: User) -> Non
 # Soft-delete audit fields + recycle bin (ТЗ 3.9.1 / Приложение B)
 # ------------------------------------------------------------------
 
+
 @pytest.fixture()
 async def admin(db_session: AsyncSession) -> User:
     for role_id in ("app_builder", "platform_admin"):
@@ -243,7 +256,11 @@ async def admin(db_session: AsyncSession) -> User:
 
 
 async def _get_record_via_list(
-    client: AsyncClient, app_id: str, entity_id: str, record_id: str, headers: dict,
+    client: AsyncClient,
+    app_id: str,
+    entity_id: str,
+    record_id: str,
+    headers: dict,
 ) -> dict:
     """The GET /{record_id} endpoint 404s on soft-deleted records; fetch it
     through the include_deleted list instead to inspect deleted_at/deleted_by."""
@@ -271,7 +288,8 @@ async def test_soft_delete_sets_deleted_at_and_deleted_by(client: AsyncClient, a
     rec_id = create.json()["id"]
 
     await client.delete(
-        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{rec_id}", headers=headers,
+        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{rec_id}",
+        headers=headers,
     )
 
     record = await _get_record_via_list(client, app_id, entity_id, rec_id, headers)
@@ -294,10 +312,12 @@ async def test_restore_clears_deleted_at_and_deleted_by(client: AsyncClient, adm
     )
     rec_id = create.json()["id"]
     await client.delete(
-        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{rec_id}", headers=headers,
+        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{rec_id}",
+        headers=headers,
     )
     await client.post(
-        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{rec_id}/restore", headers=headers,
+        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{rec_id}/restore",
+        headers=headers,
     )
 
     record = await _get_record_via_list(client, app_id, entity_id, rec_id, headers)
@@ -341,7 +361,8 @@ async def test_recycle_bin_lists_deleted_record(client: AsyncClient, admin: User
     )
     rec_id = create.json()["id"]
     await client.delete(
-        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{rec_id}", headers=headers,
+        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{rec_id}",
+        headers=headers,
     )
 
     resp = await client.get(f"/api/v1/apps/{app_id}/recycle-bin", headers=headers)
@@ -357,25 +378,31 @@ async def test_recycle_bin_lists_deleted_record(client: AsyncClient, admin: User
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_recycle_bin_excludes_active_and_restored_records(client: AsyncClient, admin: User) -> None:
+async def test_recycle_bin_excludes_active_and_restored_records(
+    client: AsyncClient, admin: User
+) -> None:
     token = await _login(client, admin.email, "Admin1234!")
     app_id, entity_id = await _setup_entity(client, token)
     headers = {"Authorization": f"Bearer {token}"}
 
     active = await client.post(
         f"/api/v1/apps/{app_id}/entities/{entity_id}/records",
-        json={"payload": {"title": "Still active"}}, headers=headers,
+        json={"payload": {"title": "Still active"}},
+        headers=headers,
     )
     deleted_then_restored = await client.post(
         f"/api/v1/apps/{app_id}/entities/{entity_id}/records",
-        json={"payload": {"title": "Deleted then restored"}}, headers=headers,
+        json={"payload": {"title": "Deleted then restored"}},
+        headers=headers,
     )
     restored_id = deleted_then_restored.json()["id"]
     await client.delete(
-        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{restored_id}", headers=headers,
+        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{restored_id}",
+        headers=headers,
     )
     await client.post(
-        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{restored_id}/restore", headers=headers,
+        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{restored_id}/restore",
+        headers=headers,
     )
 
     resp = await client.get(f"/api/v1/apps/{app_id}/recycle-bin", headers=headers)
@@ -401,17 +428,20 @@ async def test_recycle_bin_filters_by_entity(client: AsyncClient, admin: User) -
 
     rec1 = await client.post(
         f"/api/v1/apps/{app_id}/entities/{entity_id}/records",
-        json={"payload": {"title": "In invoice"}}, headers=headers,
+        json={"payload": {"title": "In invoice"}},
+        headers=headers,
     )
     rec2 = await client.post(
         f"/api/v1/apps/{app_id}/entities/{other_entity_id}/records",
-        json={"payload": {}}, headers=headers,
+        json={"payload": {}},
+        headers=headers,
     )
     for eid, rid in [(entity_id, rec1.json()["id"]), (other_entity_id, rec2.json()["id"])]:
         await client.delete(f"/api/v1/apps/{app_id}/entities/{eid}/records/{rid}", headers=headers)
 
     resp = await client.get(
-        f"/api/v1/apps/{app_id}/recycle-bin?entity_id={entity_id}", headers=headers,
+        f"/api/v1/apps/{app_id}/recycle-bin?entity_id={entity_id}",
+        headers=headers,
     )
     assert resp.status_code == 200
     items = resp.json()["items"]
@@ -421,7 +451,9 @@ async def test_recycle_bin_filters_by_entity(client: AsyncClient, admin: User) -
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_cascade_delete_marks_child_as_cascade_deleted(client: AsyncClient, admin: User) -> None:
+async def test_cascade_delete_marks_child_as_cascade_deleted(
+    client: AsyncClient, admin: User
+) -> None:
     """Deleting a parent soft-deletes one_to_many children and stamps
     deleted_at/deleted_by/cascade_deleted_by on them too."""
     token = await _login(client, admin.email, "Admin1234!")
@@ -453,17 +485,20 @@ async def test_cascade_delete_marks_child_as_cascade_deleted(client: AsyncClient
 
     parent = await client.post(
         f"/api/v1/apps/{app_id}/entities/{parent_entity_id}/records",
-        json={"payload": {"title": "Parent invoice"}}, headers=headers,
+        json={"payload": {"title": "Parent invoice"}},
+        headers=headers,
     )
     parent_id = parent.json()["id"]
     child = await client.post(
         f"/api/v1/apps/{app_id}/entities/{child_entity_id}/records",
-        json={"payload": {"invoice_id": parent_id}}, headers=headers,
+        json={"payload": {"invoice_id": parent_id}},
+        headers=headers,
     )
     child_id = child.json()["id"]
 
     await client.delete(
-        f"/api/v1/apps/{app_id}/entities/{parent_entity_id}/records/{parent_id}", headers=headers,
+        f"/api/v1/apps/{app_id}/entities/{parent_entity_id}/records/{parent_id}",
+        headers=headers,
     )
 
     child_row = await _get_record_via_list(client, app_id, child_entity_id, child_id, headers)
@@ -479,7 +514,9 @@ async def test_cascade_delete_marks_child_as_cascade_deleted(client: AsyncClient
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_cascade_restore_clears_child_deleted_fields(client: AsyncClient, admin: User) -> None:
+async def test_cascade_restore_clears_child_deleted_fields(
+    client: AsyncClient, admin: User
+) -> None:
     token = await _login(client, admin.email, "Admin1234!")
     headers = {"Authorization": f"Bearer {token}"}
     app_id, parent_entity_id = await _setup_entity(client, token)
@@ -508,20 +545,24 @@ async def test_cascade_restore_clears_child_deleted_fields(client: AsyncClient, 
 
     parent = await client.post(
         f"/api/v1/apps/{app_id}/entities/{parent_entity_id}/records",
-        json={"payload": {"title": "Parent"}}, headers=headers,
+        json={"payload": {"title": "Parent"}},
+        headers=headers,
     )
     parent_id = parent.json()["id"]
     child = await client.post(
         f"/api/v1/apps/{app_id}/entities/{child_entity_id}/records",
-        json={"payload": {"invoice_id": parent_id}}, headers=headers,
+        json={"payload": {"invoice_id": parent_id}},
+        headers=headers,
     )
     child_id = child.json()["id"]
 
     await client.delete(
-        f"/api/v1/apps/{app_id}/entities/{parent_entity_id}/records/{parent_id}", headers=headers,
+        f"/api/v1/apps/{app_id}/entities/{parent_entity_id}/records/{parent_id}",
+        headers=headers,
     )
     await client.post(
-        f"/api/v1/apps/{app_id}/entities/{parent_entity_id}/records/{parent_id}/restore", headers=headers,
+        f"/api/v1/apps/{app_id}/entities/{parent_entity_id}/records/{parent_id}/restore",
+        headers=headers,
     )
 
     child_row = await _get_record_via_list(client, app_id, child_entity_id, child_id, headers)
@@ -533,6 +574,7 @@ async def test_cascade_restore_clears_child_deleted_fields(client: AsyncClient, 
 # ------------------------------------------------------------------
 # Filter engine
 # ------------------------------------------------------------------
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -616,11 +658,16 @@ async def test_currency_field_rejects_non_numeric_value(client: AsyncClient, bui
     headers = {"Authorization": f"Bearer {token}"}
 
     import uuid
+
     slug = f"rec-app-{uuid.uuid4().hex[:6]}"
-    app = await client.post("/api/v1/apps", json={"slug": slug, "name": "Currency App"}, headers=headers)
+    app = await client.post(
+        "/api/v1/apps", json={"slug": slug, "name": "Currency App"}, headers=headers
+    )
     app_id = app.json()["id"]
     entity = await client.post(
-        f"/api/v1/apps/{app_id}/entities", json={"slug": "op", "display_name": "Operation"}, headers=headers,
+        f"/api/v1/apps/{app_id}/entities",
+        json={"slug": "op", "display_name": "Operation"},
+        headers=headers,
     )
     entity_id = entity.json()["id"]
     await client.post(

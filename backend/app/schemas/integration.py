@@ -1,14 +1,15 @@
 """Integration layer schemas — webhook subscriptions and delivery history."""
+
 import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
-
+from pydantic import BaseModel, Field, field_validator
 
 # ------------------------------------------------------------------
 # WebhookSubscription
 # ------------------------------------------------------------------
+
 
 class WebhookSubscriptionRead(BaseModel):
     id: uuid.UUID
@@ -67,6 +68,7 @@ class WebhookSubscriptionUpdate(BaseModel):
 
 class RotateSecretResponse(BaseModel):
     """New secret returned only once on rotation — store it immediately."""
+
     id: uuid.UUID
     secret: str
 
@@ -74,6 +76,7 @@ class RotateSecretResponse(BaseModel):
 # ------------------------------------------------------------------
 # WebhookDelivery
 # ------------------------------------------------------------------
+
 
 class WebhookDeliveryRead(BaseModel):
     id: uuid.UUID
@@ -93,8 +96,10 @@ class WebhookDeliveryRead(BaseModel):
 # Outbox (internal — used by OutboxWriter, not exposed via API)
 # ------------------------------------------------------------------
 
+
 class OutboxPublish(BaseModel):
     """Payload for writing an event to the transactional outbox."""
+
     event_type: str = Field(min_length=1, max_length=64)
     payload: dict[str, Any]
     dedup_key: str | None = None

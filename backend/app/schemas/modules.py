@@ -47,8 +47,8 @@ class AppModuleRead(BaseModel):
 class ModuleConflict(BaseModel):
     kind: Literal["entity", "field", "page"]
     name: str
-    entity: str | None = None   # parent entity slug for field conflicts
-    source: str | None = None   # module code that owns it, or "manual"
+    entity: str | None = None  # parent entity slug for field conflicts
+    source: str | None = None  # module code that owns it, or "manual"
     action: Literal["reused", "skipped"]
 
 

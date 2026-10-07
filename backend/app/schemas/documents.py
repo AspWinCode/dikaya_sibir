@@ -1,4 +1,5 @@
 """Document registrar + номенклатура дел schemas (ТЗ 3.10)."""
+
 import uuid
 from datetime import date, datetime
 

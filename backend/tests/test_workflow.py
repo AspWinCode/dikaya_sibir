@@ -4,13 +4,10 @@ Workflow Engine tests.
 Unit tests: FSM evaluator (guards, roles, terminal state, enter/exit actions).
 Integration tests: definition CRUD, instance lifecycle, transition, concurrent modification.
 """
+
 import uuid
-from typing import Any
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import hash_password
 from app.engine.fsm import (
     FSMSpec,
@@ -21,13 +18,12 @@ from app.engine.fsm import (
     TerminalStateError,
     TransitionNotFoundError,
     TransitionSpec,
-    build_fsm_spec,
     enter_initial_state,
     execute_fsm_transition,
 )
-from app.engine.interpreter import ExecutionContext
 from app.models.identity import Role, User, UserRole
-
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ==================================================================
 # Helpers
@@ -81,9 +77,9 @@ def _simple_spec() -> FSMSpec:
         workflow_id=str(uuid.uuid4()),
         initial_state="draft",
         states={
-            "draft":   _state("draft"),
-            "review":  _state("review", sla_seconds=3600),
-            "done":    _state("done", is_terminal=True),
+            "draft": _state("draft"),
+            "review": _state("review", sla_seconds=3600),
+            "done": _state("done", is_terminal=True),
         },
         transitions=[
             _transition("submit", "draft", "review"),
@@ -137,9 +133,7 @@ class TestFSMTransitionHappy:
     def test_basic_transition(self) -> None:
         spec = _simple_spec()
         entity_id, app_id = _ctx_ids()
-        result = execute_fsm_transition(
-            spec, "draft", "submit", {}, entity_id, app_id
-        )
+        result = execute_fsm_transition(spec, "draft", "submit", {}, entity_id, app_id)
         assert isinstance(result, FSMTransitionResult)
         assert result.new_state == "review"
         assert result.errors == []
@@ -163,15 +157,15 @@ class TestFSMTransitionHappy:
             states={"new": _state("new"), "approved": _state("approved")},
             transitions=[
                 _transition(
-                    "approve", "new", "approved",
+                    "approve",
+                    "new",
+                    "approved",
                     guard={"type": "compare", "field": "amount", "op": "gt", "value": 0},
                 ),
             ],
         )
         entity_id, app_id = _ctx_ids()
-        result = execute_fsm_transition(
-            spec, "new", "approve", {"amount": 100}, entity_id, app_id
-        )
+        result = execute_fsm_transition(spec, "new", "approve", {"amount": 100}, entity_id, app_id)
         assert result.new_state == "approved"
 
     def test_transition_actions_field_mutation(self) -> None:
@@ -181,10 +175,15 @@ class TestFSMTransitionHappy:
             states={"draft": _state("draft"), "submitted": _state("submitted")},
             transitions=[
                 _transition(
-                    "submit", "draft", "submitted",
+                    "submit",
+                    "draft",
+                    "submitted",
                     actions=[
-                        {"type": "set_field", "field": "submitted_flag",
-                         "value": {"type": "literal", "value": True}},
+                        {
+                            "type": "set_field",
+                            "field": "submitted_flag",
+                            "value": {"type": "literal", "value": True},
+                        },
                     ],
                 ),
             ],
@@ -194,27 +193,42 @@ class TestFSMTransitionHappy:
         assert result.field_mutations.get("submitted_flag") is True
 
     def test_on_exit_actions_run_before_transition_actions(self) -> None:
-        mutations: list[str] = []
-
         spec = FSMSpec(
             workflow_id=str(uuid.uuid4()),
             initial_state="a",
             states={
-                "a": _state("a", on_exit=[
-                    {"type": "set_field", "field": "step",
-                     "value": {"type": "literal", "value": "exit_a"}},
-                ]),
-                "b": _state("b", on_enter=[
-                    {"type": "set_field", "field": "step",
-                     "value": {"type": "literal", "value": "enter_b"}},
-                ]),
+                "a": _state(
+                    "a",
+                    on_exit=[
+                        {
+                            "type": "set_field",
+                            "field": "step",
+                            "value": {"type": "literal", "value": "exit_a"},
+                        },
+                    ],
+                ),
+                "b": _state(
+                    "b",
+                    on_enter=[
+                        {
+                            "type": "set_field",
+                            "field": "step",
+                            "value": {"type": "literal", "value": "enter_b"},
+                        },
+                    ],
+                ),
             },
             transitions=[
                 _transition(
-                    "go", "a", "b",
+                    "go",
+                    "a",
+                    "b",
                     actions=[
-                        {"type": "set_field", "field": "tr_step",
-                         "value": {"type": "literal", "value": "transition"}},
+                        {
+                            "type": "set_field",
+                            "field": "tr_step",
+                            "value": {"type": "literal", "value": "transition"},
+                        },
                     ],
                 ),
             ],
@@ -231,10 +245,17 @@ class TestFSMTransitionHappy:
             initial_state="draft",
             states={
                 "draft": _state("draft"),
-                "review": _state("review", on_enter=[
-                    {"type": "send_notification", "to": "reviewer@example.com",
-                     "subject": "New review request", "template": ""},
-                ]),
+                "review": _state(
+                    "review",
+                    on_enter=[
+                        {
+                            "type": "send_notification",
+                            "to": "reviewer@example.com",
+                            "subject": "New review request",
+                            "template": "",
+                        },
+                    ],
+                ),
             },
             transitions=[_transition("submit", "draft", "review")],
         )
@@ -269,7 +290,9 @@ class TestFSMTransitionErrors:
             states={"new": _state("new"), "approved": _state("approved")},
             transitions=[
                 _transition(
-                    "approve", "new", "approved",
+                    "approve",
+                    "new",
+                    "approved",
                     guard={"type": "compare", "field": "amount", "op": "gt", "value": 100},
                 ),
             ],
@@ -321,10 +344,16 @@ class TestEnterInitialState:
             workflow_id=str(uuid.uuid4()),
             initial_state="new",
             states={
-                "new": _state("new", on_enter=[
-                    {"type": "set_field", "field": "initialized",
-                     "value": {"type": "literal", "value": True}},
-                ]),
+                "new": _state(
+                    "new",
+                    on_enter=[
+                        {
+                            "type": "set_field",
+                            "field": "initialized",
+                            "value": {"type": "literal", "value": True},
+                        },
+                    ],
+                ),
             },
             transitions=[],
         )
@@ -356,6 +385,7 @@ class TestEnterInitialState:
 # Fixtures
 # ==================================================================
 
+
 @pytest.fixture()
 async def builder(db_session: AsyncSession) -> User:
     for role_id in ("app_builder",):
@@ -382,7 +412,8 @@ async def _login(client: AsyncClient, email: str, pwd: str) -> str:
 async def _setup_app(client: AsyncClient, token: str) -> tuple[str, str]:
     slug = f"wf-app-{uuid.uuid4().hex[:6]}"
     app_resp = await client.post(
-        "/api/v1/apps", json={"slug": slug, "name": "WF Test App"},
+        "/api/v1/apps",
+        json={"slug": slug, "name": "WF Test App"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert app_resp.status_code == 201, app_resp.text
@@ -408,11 +439,15 @@ async def _create_full_workflow(
     headers = {"Authorization": f"Bearer {token}"}
     base = f"/api/v1/apps/{app_id}/workflows"
 
-    wf = await client.post(base, json={
-        "entity_id": entity_id,
-        "name": "Ticket Workflow",
-        "initial_state": "draft",
-    }, headers=headers)
+    wf = await client.post(
+        base,
+        json={
+            "entity_id": entity_id,
+            "name": "Ticket Workflow",
+            "initial_state": "draft",
+        },
+        headers=headers,
+    )
     assert wf.status_code == 201, wf.text
     workflow_id = wf.json()["id"]
 
@@ -473,9 +508,7 @@ async def test_get_workflow_not_found(client: AsyncClient, builder: User) -> Non
     app_id, _ = await _setup_app(client, token)
     headers = {"Authorization": f"Bearer {token}"}
 
-    resp = await client.get(
-        f"/api/v1/apps/{app_id}/workflows/{uuid.uuid4()}", headers=headers
-    )
+    resp = await client.get(f"/api/v1/apps/{app_id}/workflows/{uuid.uuid4()}", headers=headers)
     assert resp.status_code == 404
 
 
@@ -488,7 +521,8 @@ async def test_activate_deactivate_workflow(client: AsyncClient, builder: User) 
     base = f"/api/v1/apps/{app_id}/workflows"
 
     wf = await client.post(
-        base, json={"entity_id": entity_id, "name": "WF", "initial_state": "new"},
+        base,
+        json={"entity_id": entity_id, "name": "WF", "initial_state": "new"},
         headers=headers,
     )
     wf_id = wf.json()["id"]
@@ -511,7 +545,8 @@ async def test_delete_workflow(client: AsyncClient, builder: User) -> None:
     base = f"/api/v1/apps/{app_id}/workflows"
 
     wf = await client.post(
-        base, json={"entity_id": entity_id, "name": "Temp WF", "initial_state": "new"},
+        base,
+        json={"entity_id": entity_id, "name": "Temp WF", "initial_state": "new"},
         headers=headers,
     )
     wf_id = wf.json()["id"]
@@ -537,7 +572,8 @@ async def test_create_state(client: AsyncClient, builder: User) -> None:
     base = f"/api/v1/apps/{app_id}/workflows"
 
     wf = await client.post(
-        base, json={"entity_id": entity_id, "name": "WF", "initial_state": "draft"},
+        base,
+        json={"entity_id": entity_id, "name": "WF", "initial_state": "draft"},
         headers=headers,
     )
     wf_id = wf.json()["id"]
@@ -561,7 +597,8 @@ async def test_state_name_must_be_lowercase(client: AsyncClient, builder: User) 
     base = f"/api/v1/apps/{app_id}/workflows"
 
     wf = await client.post(
-        base, json={"entity_id": entity_id, "name": "WF", "initial_state": "draft"},
+        base,
+        json={"entity_id": entity_id, "name": "WF", "initial_state": "draft"},
         headers=headers,
     )
     wf_id = wf.json()["id"]
@@ -583,15 +620,20 @@ async def test_create_transition(client: AsyncClient, builder: User) -> None:
     base = f"/api/v1/apps/{app_id}/workflows"
 
     wf = await client.post(
-        base, json={"entity_id": entity_id, "name": "WF", "initial_state": "draft"},
+        base,
+        json={"entity_id": entity_id, "name": "WF", "initial_state": "draft"},
         headers=headers,
     )
     wf_id = wf.json()["id"]
 
     tr_resp = await client.post(
         f"{base}/{wf_id}/transitions",
-        json={"name": "submit", "display_name": "Submit",
-              "from_state": "draft", "to_state": "review"},
+        json={
+            "name": "submit",
+            "display_name": "Submit",
+            "from_state": "draft",
+            "to_state": "review",
+        },
         headers=headers,
     )
     assert tr_resp.status_code == 201
@@ -764,7 +806,7 @@ async def test_transition_log_records_history(client: AsyncClient, builder: User
     assert log_resp.status_code == 200
     log = log_resp.json()
     assert len(log) == 2  # start entry + submit transition
-    assert log[0]["from_state"] is None   # instance start
+    assert log[0]["from_state"] is None  # instance start
     assert log[0]["to_state"] == "draft"
     assert log[1]["from_state"] == "draft"
     assert log[1]["to_state"] == "review"
@@ -806,7 +848,8 @@ async def test_start_inactive_workflow_fails(client: AsyncClient, builder: User)
     base = f"/api/v1/apps/{app_id}/workflows"
 
     wf = await client.post(
-        base, json={"entity_id": entity_id, "name": "Inactive WF", "initial_state": "new"},
+        base,
+        json={"entity_id": entity_id, "name": "Inactive WF", "initial_state": "new"},
         headers=headers,
     )
     wf_id = wf.json()["id"]

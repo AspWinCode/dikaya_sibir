@@ -1,10 +1,10 @@
 """User CRUD endpoint tests."""
-import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
+import pytest
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.fixture()
@@ -28,9 +28,7 @@ async def admin_user(db_session: AsyncSession) -> User:
 
 
 async def _login(client: AsyncClient, email: str, password: str) -> str:
-    resp = await client.post(
-        "/api/v1/auth/login", json={"email": email, "password": password}
-    )
+    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": password})
     return resp.json()["access_token"]
 
 
@@ -40,7 +38,11 @@ async def test_create_user_as_admin(client: AsyncClient, admin_user: User) -> No
     token = await _login(client, admin_user.email, "AdminPass1!")
     resp = await client.post(
         "/api/v1/users",
-        json={"email": "newuser@example.com", "display_name": "New User", "password": "NewPass12345!"},
+        json={
+            "email": "newuser@example.com",
+            "display_name": "New User",
+            "password": "NewPass12345!",
+        },
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 201
@@ -55,13 +57,17 @@ async def test_create_user_duplicate_email(client: AsyncClient, admin_user: User
     payload = {"email": "dup@example.com", "display_name": "Dup", "password": "DupPass12345!"}
 
     await client.post("/api/v1/users", json=payload, headers={"Authorization": f"Bearer {token}"})
-    resp = await client.post("/api/v1/users", json=payload, headers={"Authorization": f"Bearer {token}"})
+    resp = await client.post(
+        "/api/v1/users", json=payload, headers={"Authorization": f"Bearer {token}"}
+    )
     assert resp.status_code == 409
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_create_user_forbidden_for_non_admin(client: AsyncClient, db_session: AsyncSession) -> None:
+async def test_create_user_forbidden_for_non_admin(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
     regular = User(
         email="regular@example.com",
         display_name="Regular",
@@ -132,7 +138,9 @@ async def test_invite_forces_password_change(
     )
     assert r.status_code == 204, r.text
 
-    h2 = {"Authorization": f"Bearer {await _login(client, 'invited@example.com', 'BrandNewPass123!')}"}
+    h2 = {
+        "Authorization": f"Bearer {await _login(client, 'invited@example.com', 'BrandNewPass123!')}"
+    }
     assert (await client.get("/api/v1/apps", headers=h2)).status_code == 200
     me = (await client.get("/api/v1/users/me", headers=h2)).json()
     assert me["must_change_password"] is False

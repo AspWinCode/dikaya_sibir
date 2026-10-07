@@ -1,4 +1,5 @@
 """Session policy: persistence and active-session queries."""
+
 import uuid
 from datetime import UTC, datetime
 
@@ -64,7 +65,9 @@ class SessionPolicyService:
 
     async def terminate(self, session_id: uuid.UUID) -> bool:
         result = await self._db.execute(
-            select(RefreshToken).where(RefreshToken.id == session_id, RefreshToken.revoked.is_(False))
+            select(RefreshToken).where(
+                RefreshToken.id == session_id, RefreshToken.revoked.is_(False)
+            )
         )
         tok = result.scalar_one_or_none()
         if tok is None:
@@ -75,6 +78,7 @@ class SessionPolicyService:
 
     async def terminate_all_for_user(self, user_id: uuid.UUID) -> int:
         from sqlalchemy import update
+
         result = await self._db.execute(
             update(RefreshToken)
             .where(RefreshToken.user_id == user_id, RefreshToken.revoked.is_(False))

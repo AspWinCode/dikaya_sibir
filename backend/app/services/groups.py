@@ -4,7 +4,7 @@ import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.identity import Group, GroupRole, User, UserGroup, UserRole
+from app.models.identity import Group, GroupRole, UserGroup, UserRole
 from app.schemas.groups import (
     GroupCreate,
     GroupDetailRead,
@@ -98,7 +98,9 @@ class GroupService:
         )
         await self._db.flush()
 
-    async def apply_roles_to_members(self, group_id: uuid.UUID, granted_by: uuid.UUID | None = None) -> int:
+    async def apply_roles_to_members(
+        self, group_id: uuid.UUID, granted_by: uuid.UUID | None = None
+    ) -> int:
         """Grant all group roles to every group member. Returns count of new grants."""
         group = await self._fetch(group_id)
         role_ids = [r.id for r in group.roles]
@@ -110,7 +112,9 @@ class GroupService:
             existing_roles = {ur.role_id for ur in member.user_roles}
             for role_id in role_ids:
                 if role_id not in existing_roles:
-                    self._db.add(UserRole(user_id=member.id, role_id=role_id, granted_by=granted_by))
+                    self._db.add(
+                        UserRole(user_id=member.id, role_id=role_id, granted_by=granted_by)
+                    )
                     count += 1
         await self._db.flush()
         logger.info("group_roles_applied", group_id=str(group_id), grants=count)

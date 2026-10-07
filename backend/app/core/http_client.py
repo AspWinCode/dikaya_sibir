@@ -12,6 +12,7 @@ Features:
     subscriptions and ad-hoc `call_webhook` rule actions authored by
     app builders, who are a lower-trust audience than platform admins.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -21,7 +22,6 @@ import json
 import secrets
 import socket
 import time
-import uuid
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -75,6 +75,7 @@ def assert_url_is_safe(url: str) -> None:
 # HMAC signing
 # ------------------------------------------------------------------
 
+
 def compute_signature(secret: str, body: bytes) -> str:
     """Return 'sha256=<hex>' HMAC signature over the raw request body."""
     mac = hmac.new(secret.encode(), body, hashlib.sha256)
@@ -89,6 +90,7 @@ def generate_secret() -> str:
 # ------------------------------------------------------------------
 # Event pattern matching
 # ------------------------------------------------------------------
+
 
 def matches_event(pattern: str, event_type: str) -> bool:
     """
@@ -115,8 +117,9 @@ def subscription_matches(events_filter: list[str], event_type: str) -> bool:
 # Delivery
 # ------------------------------------------------------------------
 
+
 class DeliveryResult:
-    __slots__ = ("success", "status_code", "response_body", "error")
+    __slots__ = ("error", "response_body", "status_code", "success")
 
     def __init__(
         self,

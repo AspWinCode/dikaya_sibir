@@ -133,5 +133,9 @@ class RelationCreate(BaseModel):
 
 class RelationUpdate(BaseModel):
     display_name: str | None = Field(default=None, max_length=256)
-    from_field_name: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"^[a-z][a-z0-9_]*$")
-    to_field_name: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"^[a-z][a-z0-9_]*$")
+    from_field_name: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[a-z][a-z0-9_]*$"
+    )
+    to_field_name: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[a-z][a-z0-9_]*$"
+    )

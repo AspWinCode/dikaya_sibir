@@ -1,5 +1,6 @@
 """Filing case auto-closure (ТЗ 3.10.2): daily sweep that closes any open
 case past its close_by date and notifies the responsible user."""
+
 import structlog
 from celery import shared_task
 
@@ -17,10 +18,11 @@ def close_overdue_filing_cases(self: object) -> dict:
     import asyncio
 
     async def _run() -> dict:
+        from sqlalchemy import select
+
         from app.core.database import AsyncSessionLocal
         from app.models.identity import User
         from app.services.registrar import RegistrarService
-        from sqlalchemy import select
 
         closed_count = 0
         async with AsyncSessionLocal() as session:
@@ -37,13 +39,15 @@ def close_overdue_filing_cases(self: object) -> dict:
                 if not user:
                     continue
                 from app.worker.tasks.notifications import send_email
+
                 send_email.apply_async(
                     kwargs={
                         "to": user.email,
                         "subject": f"Дело «{case.title}» закрыто по истечении срока",
                         "body_html": (
                             f"<p>Дело <b>{case.index_code} — {case.title}</b> автоматически "
-                            f"закрыто {case.closed_at:%d.%m.%Y}, так как истёк установленный срок.</p>"
+                            f"закрыто {case.closed_at:%d.%m.%Y}, так как истёк "
+                            "установленный срок.</p>"
                         ),
                     },
                     queue="notifications",

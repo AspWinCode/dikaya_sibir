@@ -1,17 +1,19 @@
 """Shareable app invite links: create, preview, sign up, accept, revoke, limits."""
-import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
+import pytest
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.fixture()
 async def owner(db_session: AsyncSession) -> User:
     if not await db_session.get(Role, "app_builder"):
         db_session.add(Role(id="app_builder", display_name="App Builder", is_system=True))
-    user = User(email="owner@example.com", display_name="Owner", password_hash=hash_password("Owner1234!"))
+    user = User(
+        email="owner@example.com", display_name="Owner", password_hash=hash_password("Owner1234!")
+    )
     db_session.add(user)
     await db_session.flush()
     db_session.add(UserRole(user_id=user.id, role_id="app_builder"))
@@ -21,7 +23,11 @@ async def owner(db_session: AsyncSession) -> User:
 
 @pytest.fixture()
 async def outsider(db_session: AsyncSession) -> User:
-    user = User(email="outsider@example.com", display_name="Outsider", password_hash=hash_password("Outsider1234!"))
+    user = User(
+        email="outsider@example.com",
+        display_name="Outsider",
+        password_hash=hash_password("Outsider1234!"),
+    )
     db_session.add(user)
     await db_session.flush()
     return user
@@ -77,11 +83,15 @@ async def test_signup_via_link_grants_membership(client: AsyncClient, owner: Use
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_accept_existing_user_and_max_uses(client: AsyncClient, owner: User, outsider: User) -> None:
+async def test_accept_existing_user_and_max_uses(
+    client: AsyncClient, owner: User, outsider: User
+) -> None:
     h = await _auth(client, owner.email, "Owner1234!")
     app_id = await _app(client, h)
     token = (
-        await client.post(f"/api/v1/apps/{app_id}/invite-links", json={"role": "editor", "max_uses": 1}, headers=h)
+        await client.post(
+            f"/api/v1/apps/{app_id}/invite-links", json={"role": "editor", "max_uses": 1}, headers=h
+        )
     ).json()["token"]
 
     oh = await _auth(client, outsider.email, "Outsider1234!")
@@ -105,7 +115,9 @@ async def test_revoke_and_permissions(client: AsyncClient, owner: User, outsider
 
     # Non-member cannot manage links
     oh = await _auth(client, outsider.email, "Outsider1234!")
-    assert (await client.post(f"/api/v1/apps/{app_id}/invite-links", json={}, headers=oh)).status_code == 403
+    assert (
+        await client.post(f"/api/v1/apps/{app_id}/invite-links", json={}, headers=oh)
+    ).status_code == 403
 
     links = (await client.get(f"/api/v1/apps/{app_id}/invite-links", headers=h)).json()
     assert [link["id"] for link in links] == [created["id"]]
@@ -114,5 +126,7 @@ async def test_revoke_and_permissions(client: AsyncClient, owner: User, outsider
     r = await client.delete(f"/api/v1/apps/{app_id}/invite-links/{created['id']}", headers=h)
     assert r.status_code == 204
     assert (await client.get(f"/api/v1/invites/{created['token']}")).status_code == 410
-    assert (await client.post(f"/api/v1/invites/{created['token']}/accept", headers=oh)).status_code == 410
+    assert (
+        await client.post(f"/api/v1/invites/{created['token']}/accept", headers=oh)
+    ).status_code == 410
     assert (await client.get("/api/v1/invites/garbage")).status_code == 410

@@ -16,11 +16,13 @@ printed ONCE to stdout/log — write them down immediately. Every demo
 account is created with must_change_password=True, so whoever uses one
 has to set their own password on first login.
 """
+
 import asyncio
 import secrets
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
 from app.core.logging import configure_logging
@@ -81,7 +83,7 @@ DEMO_ACCOUNTS = [
 ]
 
 
-async def _find_target_app(session) -> App | None:
+async def _find_target_app(session: AsyncSession) -> App | None:
     result = await session.execute(select(App).where(App.name == TARGET_APP_NAME))
     app = result.scalar_one_or_none()
     if app is not None:
@@ -90,7 +92,7 @@ async def _find_target_app(session) -> App | None:
     return result.scalar_one_or_none()
 
 
-async def _ensure_role(session, role_id: str) -> None:
+async def _ensure_role(session: AsyncSession, role_id: str) -> None:
     if not await session.get(Role, role_id):
         session.add(Role(id=role_id, display_name=role_id, is_system=True))
         await session.flush()
@@ -135,7 +137,9 @@ async def run() -> None:
                 session.add(AppMember(app_id=target_app.id, user_id=user.id, role=app_role))
 
             created.append((email, password, description))
-            logger.info("demo_account_created", email=email, app_role=app_role, global_roles=global_roles)
+            logger.info(
+                "demo_account_created", email=email, app_role=app_role, global_roles=global_roles
+            )
 
         await session.commit()
 

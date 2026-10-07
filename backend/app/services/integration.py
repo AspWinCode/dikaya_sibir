@@ -6,8 +6,8 @@ OutboxWriter  — writes events to integration.outbox within the caller's
 
 WebhookService — CRUD for webhook subscriptions + delivery history queries.
 """
+
 import uuid
-from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -18,10 +18,10 @@ from app.core.http_client import generate_secret
 from app.models.integration import Outbox, WebhookDelivery, WebhookSubscription
 from app.schemas.integration import (
     RotateSecretResponse,
+    WebhookDeliveryRead,
     WebhookSubscriptionCreate,
     WebhookSubscriptionRead,
     WebhookSubscriptionUpdate,
-    WebhookDeliveryRead,
 )
 
 logger = structlog.get_logger(__name__)
@@ -31,6 +31,7 @@ logger = structlog.get_logger(__name__)
 # Errors
 # ------------------------------------------------------------------
 
+
 class WebhookNotFoundError(Exception):
     pass
 
@@ -38,6 +39,7 @@ class WebhookNotFoundError(Exception):
 # ------------------------------------------------------------------
 # Outbox writer
 # ------------------------------------------------------------------
+
 
 class OutboxWriter:
     """
@@ -81,6 +83,7 @@ class OutboxWriter:
 # ------------------------------------------------------------------
 # Webhook service
 # ------------------------------------------------------------------
+
 
 class WebhookService:
     def __init__(self, db: AsyncSession) -> None:
@@ -154,9 +157,7 @@ class WebhookService:
         await self._db.delete(sub)
         await self._db.flush()
 
-    async def rotate_secret(
-        self, app_id: uuid.UUID, sub_id: uuid.UUID
-    ) -> RotateSecretResponse:
+    async def rotate_secret(self, app_id: uuid.UUID, sub_id: uuid.UUID) -> RotateSecretResponse:
         sub = await self._fetch(app_id, sub_id)
         new_secret = generate_secret()
         sub.secret = new_secret

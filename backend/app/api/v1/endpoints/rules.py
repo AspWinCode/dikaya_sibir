@@ -4,7 +4,6 @@ import structlog
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import AuthDep, DbDep
-from app.schemas.common import CursorPage
 from app.schemas.rules import (
     CycleCheckResponse,
     ProcessStepCreate,
@@ -70,7 +69,11 @@ async def check_cycles(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> C
     return await RuleService(db).check_cycles(app_id)
 
 
-@router.get("/conflicts", response_model=list[RuleConflictLogRead], summary="Rule priority conflict log (ТЗ 3.5.4)")
+@router.get(
+    "/conflicts",
+    response_model=list[RuleConflictLogRead],
+    summary="Rule priority conflict log (ТЗ 3.5.4)",
+)
 async def get_rule_conflicts(
     app_id: uuid.UUID,
     current_user: AuthDep,
@@ -82,7 +85,11 @@ async def get_rule_conflicts(
     return await RuleService(db).list_conflicts(app_id, entity_id=entity_id, limit=limit)
 
 
-@router.get("/webhook-deliveries", response_model=list[RuleWebhookDeliveryRead], summary="call_webhook action delivery log")
+@router.get(
+    "/webhook-deliveries",
+    response_model=list[RuleWebhookDeliveryRead],
+    summary="call_webhook action delivery log",
+)
 async def get_rule_webhook_deliveries(
     app_id: uuid.UUID,
     current_user: AuthDep,
@@ -95,7 +102,9 @@ async def get_rule_webhook_deliveries(
 
 
 @router.get("/{rule_id}", response_model=RuleRead)
-async def get_rule(app_id: uuid.UUID, rule_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> RuleRead:
+async def get_rule(
+    app_id: uuid.UUID, rule_id: uuid.UUID, current_user: AuthDep, db: DbDep
+) -> RuleRead:
     await _check_app(app_id, current_user, db)
     try:
         return await RuleService(db).get_rule(app_id, rule_id)
@@ -115,12 +124,17 @@ async def update_rule(
     except RuleCycleError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"message": "Activating this rule creates a dependency cycle", "cycles": exc.cycles},
+            detail={
+                "message": "Activating this rule creates a dependency cycle",
+                "cycles": exc.cycles,
+            },
         ) from exc
 
 
 @router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_rule(app_id: uuid.UUID, rule_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> None:
+async def delete_rule(
+    app_id: uuid.UUID, rule_id: uuid.UUID, current_user: AuthDep, db: DbDep
+) -> None:
     await _check_app(app_id, current_user, db)
     try:
         await RuleService(db).delete_rule(app_id, rule_id)
@@ -129,7 +143,9 @@ async def delete_rule(app_id: uuid.UUID, rule_id: uuid.UUID, current_user: AuthD
 
 
 @router.post("/{rule_id}/activate", response_model=RuleRead)
-async def activate_rule(app_id: uuid.UUID, rule_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> RuleRead:
+async def activate_rule(
+    app_id: uuid.UUID, rule_id: uuid.UUID, current_user: AuthDep, db: DbDep
+) -> RuleRead:
     await _check_app(app_id, current_user, db)
     try:
         return await RuleService(db).activate_rule(app_id, rule_id)
@@ -143,7 +159,9 @@ async def activate_rule(app_id: uuid.UUID, rule_id: uuid.UUID, current_user: Aut
 
 
 @router.post("/{rule_id}/deactivate", response_model=RuleRead)
-async def deactivate_rule(app_id: uuid.UUID, rule_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> RuleRead:
+async def deactivate_rule(
+    app_id: uuid.UUID, rule_id: uuid.UUID, current_user: AuthDep, db: DbDep
+) -> RuleRead:
     await _check_app(app_id, current_user, db)
     try:
         return await RuleService(db).deactivate_rule(app_id, rule_id)
@@ -183,6 +201,7 @@ async def get_rule_logs(
 # Process steps — ordered CRUD bound to a rule (stored in rule.actions)
 # ------------------------------------------------------------------
 
+
 def _bad_step(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
@@ -202,7 +221,9 @@ async def list_steps(
         raise _rule_not_found(exc) from exc
 
 
-@router.post("/{rule_id}/steps", response_model=ProcessStepRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{rule_id}/steps", response_model=ProcessStepRead, status_code=status.HTTP_201_CREATED
+)
 async def add_step(
     app_id: uuid.UUID, rule_id: uuid.UUID, body: ProcessStepCreate, current_user: AuthDep, db: DbDep
 ) -> ProcessStepRead:
@@ -217,7 +238,11 @@ async def add_step(
 
 @router.put("/{rule_id}/steps/reorder", response_model=list[ProcessStepRead])
 async def reorder_steps(
-    app_id: uuid.UUID, rule_id: uuid.UUID, body: ProcessStepsReorder, current_user: AuthDep, db: DbDep
+    app_id: uuid.UUID,
+    rule_id: uuid.UUID,
+    body: ProcessStepsReorder,
+    current_user: AuthDep,
+    db: DbDep,
 ) -> list[ProcessStepRead]:
     await _check_app(app_id, current_user, db)
     try:

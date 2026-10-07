@@ -4,20 +4,19 @@ Rules Engine wiring tests.
 Verifies that POST/PATCH /records dispatch rule evaluation to the sandbox queue.
 Celery `apply_async` is mocked so no actual worker or Redis is required.
 """
+
 from __future__ import annotations
 
 import uuid
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
 from app.services.rules import RuleService
-
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ------------------------------------------------------------------
 # Shared fixtures
@@ -50,7 +49,8 @@ async def _login(client: AsyncClient, email: str, pwd: str) -> str:
 async def _setup_entity(client: AsyncClient, token: str) -> tuple[str, str]:
     slug = f"wire-app-{uuid.uuid4().hex[:6]}"
     app = await client.post(
-        "/api/v1/apps", json={"slug": slug, "name": "Wiring Test App"},
+        "/api/v1/apps",
+        json={"slug": slug, "name": "Wiring Test App"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert app.status_code == 201, app.text
@@ -153,7 +153,9 @@ async def test_evaluate_rules_context_includes_record_id(db_session: AsyncSessio
 
 
 @pytest.mark.asyncio
-async def test_validation_rules_are_never_dispatched_to_the_async_batch(db_session: AsyncSession) -> None:
+async def test_validation_rules_are_never_dispatched_to_the_async_batch(
+    db_session: AsyncSession,
+) -> None:
     """Validation rules run synchronously, in-process, before the write
     commits (ValidationRuleService) — the only place that resolves their
     `lookup` condition nodes and knows what `block_save` means. The pure
@@ -172,18 +174,39 @@ async def test_validation_rules_are_never_dispatched_to_the_async_batch(db_sessi
     record_id = uuid.uuid4()
 
     validation_rule = Rule(
-        app_id=app_id, entity_id=entity_id, name="Block if too big", rule_type="validation",
+        app_id=app_id,
+        entity_id=entity_id,
+        name="Block if too big",
+        rule_type="validation",
         trigger={"event": "record.created", "watch_fields": []},
-        conditions={"type": "compare", "field": "amount", "op": "gt",
-                    "value": {"type": "lookup", "entity_id": str(uuid.uuid4()), "field": "x", "agg": "sum", "filter": {}}},
+        conditions={
+            "type": "compare",
+            "field": "amount",
+            "op": "gt",
+            "value": {
+                "type": "lookup",
+                "entity_id": str(uuid.uuid4()),
+                "field": "x",
+                "agg": "sum",
+                "filter": {},
+            },
+        },
         actions=[{"type": "block_save", "message": "too big"}],
-        priority=10, is_active=True,
+        priority=10,
+        is_active=True,
     )
     automation_rule = Rule(
-        app_id=app_id, entity_id=entity_id, name="Flag it", rule_type="automation",
+        app_id=app_id,
+        entity_id=entity_id,
+        name="Flag it",
+        rule_type="automation",
         trigger={"event": "record.created", "watch_fields": []},
-        conditions={}, actions=[{"type": "set_field", "field": "flagged", "value": {"type": "literal", "value": True}}],
-        priority=50, is_active=True,
+        conditions={},
+        actions=[
+            {"type": "set_field", "field": "flagged", "value": {"type": "literal", "value": True}}
+        ],
+        priority=50,
+        is_active=True,
     )
     db_session.add(validation_rule)
     db_session.add(automation_rule)
@@ -213,11 +236,19 @@ async def test_only_validation_rules_means_nothing_is_dispatched(db_session: Asy
     entity_id = uuid.uuid4()
     record_id = uuid.uuid4()
 
-    db_session.add(Rule(
-        app_id=app_id, entity_id=entity_id, name="Only validation", rule_type="validation",
-        trigger={"event": "record.created", "watch_fields": []},
-        conditions={}, actions=[{"type": "block_save"}], priority=10, is_active=True,
-    ))
+    db_session.add(
+        Rule(
+            app_id=app_id,
+            entity_id=entity_id,
+            name="Only validation",
+            rule_type="validation",
+            trigger={"event": "record.created", "watch_fields": []},
+            conditions={},
+            actions=[{"type": "block_save"}],
+            priority=10,
+            is_active=True,
+        )
+    )
     await db_session.flush()
 
     with patch(
@@ -242,11 +273,18 @@ async def test_evaluate_rules_sorts_by_priority(db_session: AsyncSession) -> Non
     record_id = uuid.uuid4()
 
     for priority, name in [(50, "low"), (1, "high"), (10, "mid")]:
-        db_session.add(Rule(
-            app_id=app_id, entity_id=entity_id, name=name,
-            trigger={"event": "record.created", "watch_fields": []},
-            conditions={}, actions=[], priority=priority, is_active=True,
-        ))
+        db_session.add(
+            Rule(
+                app_id=app_id,
+                entity_id=entity_id,
+                name=name,
+                trigger={"event": "record.created", "watch_fields": []},
+                conditions={},
+                actions=[],
+                priority=priority,
+                is_active=True,
+            )
+        )
     await db_session.flush()
 
     mock_task = MagicMock()
@@ -273,9 +311,7 @@ async def test_evaluate_rules_sorts_by_priority(db_session: AsyncSession) -> Non
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_create_record_triggers_rule_evaluation(
-    client: AsyncClient, builder: User
-) -> None:
+async def test_create_record_triggers_rule_evaluation(client: AsyncClient, builder: User) -> None:
     """POST /records should call evaluate_rules_for_event (mocked — no Celery needed)."""
     token = await _login(client, builder.email, "Build1234!")
     app_id, entity_id = await _setup_entity(client, token)
@@ -319,9 +355,7 @@ async def test_create_record_triggers_rule_evaluation(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_update_record_triggers_rule_evaluation(
-    client: AsyncClient, builder: User
-) -> None:
+async def test_update_record_triggers_rule_evaluation(client: AsyncClient, builder: User) -> None:
     """PATCH /records should call evaluate_rules_for_event with changed_fields."""
     token = await _login(client, builder.email, "Build1234!")
     app_id, entity_id = await _setup_entity(client, token)

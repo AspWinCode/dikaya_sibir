@@ -1,14 +1,15 @@
 """Tests for SequenceService and /sequences endpoint."""
+
 import uuid
+
 import pytest
+from app.core.security import hash_password
+from app.models.identity import Role, User, UserRole
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import hash_password
-from app.models.identity import Role, User, UserRole
-
-
 # ── helpers ──────────────────────────────────────────────────────────────────
+
 
 def _app_url(app_id: str) -> str:
     return f"/api/v1/apps/{app_id}"
@@ -19,6 +20,7 @@ def _seq_url(app_id: str, entity_id: str) -> str:
 
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture()
 async def admin_token(client: AsyncClient, db_session: AsyncSession) -> str:
@@ -68,7 +70,12 @@ async def app_and_entity(client: AsyncClient, admin_token: str):
     # Add an autonumber field
     field_r = await client.post(
         f"/api/v1/apps/{app_id}/entities/{entity_id}/fields",
-        json={"name": "order_no", "display_name": "Order #", "field_type": "autonumber", "is_required": False},
+        json={
+            "name": "order_no",
+            "display_name": "Order #",
+            "field_type": "autonumber",
+            "is_required": False,
+        },
         headers=headers,
     )
     assert field_r.status_code == 201, field_r.text
@@ -77,6 +84,7 @@ async def app_and_entity(client: AsyncClient, admin_token: str):
 
 
 # ── CRUD tests ─────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_create_sequence(client: AsyncClient, app_and_entity):
@@ -113,7 +121,9 @@ async def test_update_sequence(client: AsyncClient, app_and_entity):
     app_id, entity_id, headers = app_and_entity
     url = _seq_url(app_id, entity_id)
 
-    create_r = await client.post(url, json={"field_name": "order_no", "prefix": "A-"}, headers=headers)
+    create_r = await client.post(
+        url, json={"field_name": "order_no", "prefix": "A-"}, headers=headers
+    )
     seq_id = create_r.json()["id"]
 
     patch_r = await client.patch(

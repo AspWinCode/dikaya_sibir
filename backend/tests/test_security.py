@@ -12,21 +12,22 @@ Integration:
   - /health/ready endpoint
   - /health/live endpoint
 """
+
 import uuid
+from typing import ClassVar
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.rate_limit import _extract_user_key
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
 from app.services.security import ABACService, FieldRestrictions
-
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ==================================================================
 # Unit: FieldRestrictions
 # ==================================================================
+
 
 class TestFieldRestrictions:
     def test_filter_payload_no_restrictions(self) -> None:
@@ -78,15 +79,17 @@ class TestFieldRestrictions:
 # Unit: rate limit key extraction
 # ==================================================================
 
+
 class TestRateLimitKey:
     def _make_request(self, auth_header: str | None = None) -> object:
         """Build a minimal Request-like mock."""
+
         class FakeClient:
             host = "1.2.3.4"
 
         class FakeRequest:
             client = FakeClient()
-            headers: dict = {}
+            headers: ClassVar[dict] = {}
 
         req = FakeRequest()
         if auth_header:
@@ -104,12 +107,14 @@ class TestRateLimitKey:
         assert key.startswith("ip:")
 
     def test_valid_jwt_payload_uses_sub(self) -> None:
-        import base64, json
+        import base64
+        import json
+
         # Craft a minimal JWT with sub claim (no real signature needed for this unit test)
         header = base64.urlsafe_b64encode(b'{"alg":"RS256"}').rstrip(b"=").decode()
-        payload = base64.urlsafe_b64encode(
-            json.dumps({"sub": "user-123"}).encode()
-        ).rstrip(b"=").decode()
+        payload = (
+            base64.urlsafe_b64encode(json.dumps({"sub": "user-123"}).encode()).rstrip(b"=").decode()
+        )
         token = f"{header}.{payload}.fakesig"
 
         req = self._make_request(f"Bearer {token}")
@@ -121,6 +126,7 @@ class TestRateLimitKey:
 # Unit: metrics registry
 # ==================================================================
 
+
 class TestMetricsRegistry:
     def test_counters_importable(self) -> None:
         from app.core.metrics import (
@@ -131,11 +137,10 @@ class TestMetricsRegistry:
             webhook_deliveries,
             workflow_transitions,
         )
+
         # All are prometheus Counter objects — should be incrementable
         rule_executions.labels(status="success").inc(0)
-        workflow_transitions.labels(
-            workflow_id="wf1", from_state="a", to_state="b"
-        ).inc(0)
+        workflow_transitions.labels(workflow_id="wf1", from_state="a", to_state="b").inc(0)
         record_operations.labels(operation="read").inc(0)
         webhook_deliveries.labels(status="delivered").inc(0)
         auth_attempts.labels(result="success").inc(0)
@@ -143,6 +148,7 @@ class TestMetricsRegistry:
 
     def test_gauge_importable(self) -> None:
         from app.core.metrics import workflow_instances_active
+
         workflow_instances_active.set(0)  # should not raise
 
 
@@ -150,12 +156,14 @@ class TestMetricsRegistry:
 # Fixtures
 # ==================================================================
 
+
 @pytest.fixture()
 async def admin_user(db_session: AsyncSession) -> User:
     for role_id in ("platform_admin", "app_builder"):
         if not await db_session.get(Role, role_id):
-            db_session.add(Role(id=role_id, display_name=role_id.replace("_", " ").title(),
-                                is_system=True))
+            db_session.add(
+                Role(id=role_id, display_name=role_id.replace("_", " ").title(), is_system=True)
+            )
     user = User(
         email=f"sec_admin_{uuid.uuid4().hex[:6]}@example.com",
         display_name="Sec Admin",
@@ -198,6 +206,7 @@ async def _setup_app_entity(client: AsyncClient, token: str) -> tuple[str, str]:
 # Integration: health endpoints
 # ==================================================================
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_health_live(client: AsyncClient) -> None:
@@ -233,6 +242,7 @@ async def test_health_full(client: AsyncClient) -> None:
 # Integration: field permission CRUD
 # ==================================================================
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_list_permissions_empty(client: AsyncClient, admin_user: User) -> None:
@@ -256,11 +266,23 @@ async def test_bulk_upsert_permissions(client: AsyncClient, admin_user: User) ->
     headers = {"Authorization": f"Bearer {token}"}
     url = f"/api/v1/apps/{app_id}/entities/{entity_id}/permissions"
 
-    body = {"permissions": [
-        {"field_name": "salary",   "role_id": "data_viewer", "can_read": False, "can_write": False},
-        {"field_name": "salary",   "role_id": "data_editor", "can_read": True,  "can_write": True},
-        {"field_name": "password", "role_id": "data_viewer", "can_read": False, "can_write": False},
-    ]}
+    body = {
+        "permissions": [
+            {
+                "field_name": "salary",
+                "role_id": "data_viewer",
+                "can_read": False,
+                "can_write": False,
+            },
+            {"field_name": "salary", "role_id": "data_editor", "can_read": True, "can_write": True},
+            {
+                "field_name": "password",
+                "role_id": "data_viewer",
+                "can_read": False,
+                "can_write": False,
+            },
+        ]
+    }
     resp = await client.put(url, json=body, headers=headers)
     assert resp.status_code == 200
     assert len(resp.json()) == 3
@@ -278,15 +300,42 @@ async def test_bulk_upsert_replaces_all(client: AsyncClient, admin_user: User) -
     headers = {"Authorization": f"Bearer {token}"}
     url = f"/api/v1/apps/{app_id}/entities/{entity_id}/permissions"
 
-    await client.put(url, json={"permissions": [
-        {"field_name": "salary", "role_id": "data_viewer", "can_read": False, "can_write": False},
-        {"field_name": "ssn",    "role_id": "data_viewer", "can_read": False, "can_write": False},
-    ]}, headers=headers)
+    await client.put(
+        url,
+        json={
+            "permissions": [
+                {
+                    "field_name": "salary",
+                    "role_id": "data_viewer",
+                    "can_read": False,
+                    "can_write": False,
+                },
+                {
+                    "field_name": "ssn",
+                    "role_id": "data_viewer",
+                    "can_read": False,
+                    "can_write": False,
+                },
+            ]
+        },
+        headers=headers,
+    )
 
     # Replace with only one row
-    r2 = await client.put(url, json={"permissions": [
-        {"field_name": "salary", "role_id": "data_viewer", "can_read": False, "can_write": False},
-    ]}, headers=headers)
+    r2 = await client.put(
+        url,
+        json={
+            "permissions": [
+                {
+                    "field_name": "salary",
+                    "role_id": "data_viewer",
+                    "can_read": False,
+                    "can_write": False,
+                },
+            ]
+        },
+        headers=headers,
+    )
     assert len(r2.json()) == 1
 
     list_r = await client.get(url, headers=headers)
@@ -301,9 +350,20 @@ async def test_delete_permission(client: AsyncClient, admin_user: User) -> None:
     headers = {"Authorization": f"Bearer {token}"}
     url = f"/api/v1/apps/{app_id}/entities/{entity_id}/permissions"
 
-    upsert = await client.put(url, json={"permissions": [
-        {"field_name": "salary", "role_id": "data_viewer", "can_read": False, "can_write": False},
-    ]}, headers=headers)
+    upsert = await client.put(
+        url,
+        json={
+            "permissions": [
+                {
+                    "field_name": "salary",
+                    "role_id": "data_viewer",
+                    "can_read": False,
+                    "can_write": False,
+                },
+            ]
+        },
+        headers=headers,
+    )
     perm_id = upsert.json()[0]["id"]
 
     del_resp = await client.delete(f"{url}/{perm_id}", headers=headers)
@@ -321,9 +381,20 @@ async def test_check_my_permissions(client: AsyncClient, admin_user: User) -> No
     headers = {"Authorization": f"Bearer {token}"}
     url = f"/api/v1/apps/{app_id}/entities/{entity_id}/permissions"
 
-    await client.put(url, json={"permissions": [
-        {"field_name": "salary", "role_id": "data_viewer", "can_read": False, "can_write": False},
-    ]}, headers=headers)
+    await client.put(
+        url,
+        json={
+            "permissions": [
+                {
+                    "field_name": "salary",
+                    "role_id": "data_viewer",
+                    "can_read": False,
+                    "can_write": False,
+                },
+            ]
+        },
+        headers=headers,
+    )
 
     check = await client.get(f"{url}/check", headers=headers)
     assert check.status_code == 200
@@ -337,11 +408,11 @@ async def test_check_my_permissions(client: AsyncClient, admin_user: User) -> No
 # Integration: ABAC enforcement in ABACService (unit-level DB test)
 # ==================================================================
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_get_restrictions_deny_wins(db_session: AsyncSession) -> None:
     """If any role denies a field, the field is denied regardless of other roles."""
-    from app.models.security import FieldPermission
     from app.schemas.security import FieldPermissionBulkUpsert, FieldPermissionUpsert
 
     entity_id = uuid.uuid4()
@@ -349,14 +420,20 @@ async def test_get_restrictions_deny_wins(db_session: AsyncSession) -> None:
 
     # role_a allows salary, role_b denies salary
     svc = ABACService(db_session)
-    await svc.bulk_upsert(app_id, entity_id, FieldPermissionBulkUpsert(permissions=[
-        FieldPermissionUpsert(
-            field_name="salary", role_id="role_a", can_read=True, can_write=True
+    await svc.bulk_upsert(
+        app_id,
+        entity_id,
+        FieldPermissionBulkUpsert(
+            permissions=[
+                FieldPermissionUpsert(
+                    field_name="salary", role_id="role_a", can_read=True, can_write=True
+                ),
+                FieldPermissionUpsert(
+                    field_name="salary", role_id="role_b", can_read=False, can_write=False
+                ),
+            ]
         ),
-        FieldPermissionUpsert(
-            field_name="salary", role_id="role_b", can_read=False, can_write=False
-        ),
-    ]))
+    )
 
     # user has both roles → deny wins
     restrictions = await svc.get_restrictions(entity_id, ["role_a", "role_b"])
@@ -383,11 +460,17 @@ async def test_filter_payload_abac(db_session: AsyncSession) -> None:
     app_id = uuid.uuid4()
     svc = ABACService(db_session)
 
-    await svc.bulk_upsert(app_id, entity_id, FieldPermissionBulkUpsert(permissions=[
-        FieldPermissionUpsert(
-            field_name="ssn", role_id="data_viewer", can_read=False, can_write=False
+    await svc.bulk_upsert(
+        app_id,
+        entity_id,
+        FieldPermissionBulkUpsert(
+            permissions=[
+                FieldPermissionUpsert(
+                    field_name="ssn", role_id="data_viewer", can_read=False, can_write=False
+                ),
+            ]
         ),
-    ]))
+    )
 
     restrictions = await svc.get_restrictions(entity_id, ["data_viewer"])
     payload = {"name": "Alice", "ssn": "123-45-6789", "email": "a@b.com"}

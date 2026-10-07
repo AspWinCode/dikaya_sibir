@@ -4,16 +4,18 @@ Expression evaluator for the Rules Engine JSON-AST.
 Node types:
   literal    — {"type": "literal", "value": <any>}
   field_ref  — {"type": "field_ref", "field": "amount"}
-  math       — {"type": "math", "op": "add|subtract|multiply|divide|modulo|power", "left": expr, "right": expr}
-  func       — {"type": "func", "name": "now|today|len|upper|lower|concat|coalesce|if|round|abs", "args": [...]}
+  math       — {"type": "math", "op": "add|subtract|multiply|divide|modulo|power",
+                "left": expr, "right": expr}
+  func       — {"type": "func", "name": "now|today|len|upper|lower|concat|coalesce|if|round|abs",
+                "args": [...]}
 
 Security limits:
   - Max nesting depth: 15
   - No I/O, no imports, no exec/eval
 """
+
 from __future__ import annotations
 
-import math as _math
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -67,7 +69,7 @@ def evaluate(node: dict[str, Any], context: dict[str, Any], _depth: int = 0) -> 
 
 
 def _to_number(val: Any, label: str) -> float:
-    if isinstance(val, (int, float)):
+    if isinstance(val, int | float):
         return float(val)
     try:
         return float(val)
@@ -77,9 +79,12 @@ def _to_number(val: Any, label: str) -> float:
 
 def _apply_math(op: str, left: float, right: float) -> float:
     match op:
-        case "add":      return left + right
-        case "subtract": return left - right
-        case "multiply": return left * right
+        case "add":
+            return left + right
+        case "subtract":
+            return left - right
+        case "multiply":
+            return left * right
         case "divide":
             if right == 0:
                 raise ExpressionError("Division by zero")
@@ -88,8 +93,14 @@ def _apply_math(op: str, left: float, right: float) -> float:
             if right == 0:
                 raise ExpressionError("Modulo by zero")
             return left % right
-        case "power":    return left ** right
-        case _:          raise ExpressionError(f"Unknown op: {op}")  # unreachable
+        case "power":
+            result = left**right
+            try:
+                return float(result)
+            except TypeError as exc:  # negative base with a fractional exponent -> complex
+                raise ExpressionError("power produced a non-real result") from exc
+        case _:
+            raise ExpressionError(f"Unknown op: {op}")  # unreachable
 
 
 def _apply_func(name: str, args: list[Any]) -> Any:
@@ -102,7 +113,7 @@ def _apply_func(name: str, args: list[Any]) -> Any:
             if not args:
                 raise ExpressionError("len() requires 1 argument")
             val = args[0]
-            return len(val) if isinstance(val, (str, list, dict)) else 0
+            return len(val) if isinstance(val, str | list | dict) else 0
         case "upper":
             return str(args[0]).upper() if args else ""
         case "lower":

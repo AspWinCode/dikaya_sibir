@@ -14,11 +14,11 @@ def export_records(
     self: object,
     app_id: str,
     entity_id: str,
-    format: str,
+    export_format: str,
     requested_by: str,
     filters: dict[str, object] | None = None,
 ) -> dict[str, str]:
     """Export entity records to CSV/XLSX and upload to S3. Placeholder implementation."""
-    logger.info("export_started", app_id=app_id, entity_id=entity_id, format=format)
+    logger.info("export_started", app_id=app_id, entity_id=entity_id, export_format=export_format)
     # Full implementation in Sprint 3 (data layer)
     return {"status": "pending", "message": "Export queued"}

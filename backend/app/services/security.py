@@ -15,11 +15,13 @@ Public API consumed by record endpoints:
 
 Admin API (field permission CRUD) is exposed via endpoints/security.py.
 """
+
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 import structlog
 from sqlalchemy import delete, select
@@ -38,6 +40,7 @@ logger = structlog.get_logger(__name__)
 # ------------------------------------------------------------------
 # Value object returned by get_restrictions()
 # ------------------------------------------------------------------
+
 
 @dataclass
 class FieldRestrictions:
@@ -73,6 +76,7 @@ class FieldRestrictions:
 # ------------------------------------------------------------------
 # ABAC service
 # ------------------------------------------------------------------
+
 
 class ABACService:
     def __init__(self, db: AsyncSession) -> None:
@@ -170,8 +174,7 @@ class ABACService:
             new_rows.append(perm)
 
         await self._db.flush()
-        logger.info("field_permissions_updated", entity_id=str(entity_id),
-                    count=len(new_rows))
+        logger.info("field_permissions_updated", entity_id=str(entity_id), count=len(new_rows))
         return [FieldPermissionRead.model_validate(r) for r in new_rows]
 
     async def delete_permission(

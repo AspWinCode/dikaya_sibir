@@ -4,12 +4,12 @@ Runs against the FileService directly with fake S3/ClamAV clients — CI has no
 MinIO/ClamAV containers (see .github/workflows/ci.yml), so hitting the real
 HTTP endpoints would require services that aren't provisioned there.
 """
+
 import uuid
 
 import pytest
+from app.services.files import FileError, FileService, RecordFileNotFoundError
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.services.files import FileError, FileNotFoundError, FileService
 
 pytestmark = pytest.mark.integration  # exercises FileService against the real test DB
 
@@ -48,11 +48,15 @@ class FakeStorage:
         self.deleted: list[str] = []
 
     @staticmethod
-    def make_key(app_id: uuid.UUID, entity_id: uuid.UUID, record_id: uuid.UUID, filename: str) -> str:
+    def make_key(
+        app_id: uuid.UUID, entity_id: uuid.UUID, record_id: uuid.UUID, filename: str
+    ) -> str:
         safe = filename.replace("/", "_").replace("..", "_")
         return f"files/{app_id}/{entity_id}/{record_id}/{uuid.uuid4()}_{safe}"
 
-    async def upload(self, bucket, key, data, content_type="application/octet-stream", metadata=None) -> None:
+    async def upload(
+        self, bucket, key, data, content_type="application/octet-stream", metadata=None
+    ) -> None:
         self.objects[key] = data
 
     async def get_presigned_url(self, bucket, key, expires=3600, filename=None) -> str:
@@ -140,9 +144,7 @@ async def test_upload_rejects_oversized_file(svc: FileService) -> None:
 
 
 @pytest.mark.asyncio
-async def test_upload_rejects_infected_file(
-    db_session: AsyncSession, storage: FakeStorage
-) -> None:
+async def test_upload_rejects_infected_file(db_session: AsyncSession, storage: FakeStorage) -> None:
     infected_av = FakeAntivirus(infected=True)
     svc = FileService(db_session, storage, infected_av)
     app_id, entity_id, record_id = _ids()
@@ -167,8 +169,12 @@ async def test_upload_rejects_infected_file(
 async def test_without_replace_same_filename_stays_independent(svc: FileService) -> None:
     app_id, entity_id, record_id = _ids()
 
-    a = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"a"))
-    b = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"b"))
+    a = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"a")
+    )
+    b = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"b")
+    )
 
     assert a.version == 1 and b.version == 1
     assert a.previous_version_id is None and b.previous_version_id is None
@@ -182,8 +188,12 @@ async def test_without_replace_same_filename_stays_independent(svc: FileService)
 async def test_without_replace_different_filename_stays_independent(svc: FileService) -> None:
     app_id, entity_id, record_id = _ids()
 
-    a = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("a.pdf", b"a"))
-    b = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("b.pdf", b"b"))
+    a = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("a.pdf", b"a")
+    )
+    b = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("b.pdf", b"b")
+    )
 
     assert a.version == 1 and b.version == 1
     files = await svc.list_files(record_id)
@@ -200,8 +210,17 @@ async def test_without_replace_different_filename_stays_independent(svc: FileSer
 async def test_replace_same_filename_creates_new_version(svc: FileService) -> None:
     app_id, entity_id, record_id = _ids()
 
-    v1 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"v1"), replace=True)
-    v2 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"v2 longer"), replace=True)
+    v1 = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"v1"), replace=True
+    )
+    v2 = await svc.upload_file(
+        app_id,
+        entity_id,
+        record_id,
+        "attachment",
+        FakeUploadFile("doc.pdf", b"v2 longer"),
+        replace=True,
+    )
 
     assert v2.version == 2
     assert v2.previous_version_id == v1.id
@@ -217,8 +236,17 @@ async def test_replace_different_filename_still_versions(svc: FileService) -> No
     same field — replace is keyed on (record, field), not the filename."""
     app_id, entity_id, record_id = _ids()
 
-    v1 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("scan.pdf", b"1"), replace=True)
-    v2 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("scan_v2.pdf", b"2"), replace=True)
+    v1 = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("scan.pdf", b"1"), replace=True
+    )
+    v2 = await svc.upload_file(
+        app_id,
+        entity_id,
+        record_id,
+        "attachment",
+        FakeUploadFile("scan_v2.pdf", b"2"),
+        replace=True,
+    )
 
     assert v2.version == 2
     assert v2.previous_version_id == v1.id
@@ -231,8 +259,12 @@ async def test_replace_different_filename_still_versions(svc: FileService) -> No
 async def test_replace_marks_previous_version_not_latest(svc: FileService) -> None:
     app_id, entity_id, record_id = _ids()
 
-    v1 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"v1"), replace=True)
-    await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"v2"), replace=True)
+    v1 = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"v1"), replace=True
+    )
+    await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"v2"), replace=True
+    )
 
     all_files = await svc.list_files(record_id, include_all_versions=True)
     by_id = {f.id: f for f in all_files}
@@ -243,9 +275,20 @@ async def test_replace_marks_previous_version_not_latest(svc: FileService) -> No
 async def test_three_replaces_form_a_chain_in_order(svc: FileService) -> None:
     app_id, entity_id, record_id = _ids()
 
-    v1 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"1"), replace=True)
-    v2 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc_final.pdf", b"2"), replace=True)
-    v3 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"3"), replace=True)
+    v1 = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"1"), replace=True
+    )
+    v2 = await svc.upload_file(
+        app_id,
+        entity_id,
+        record_id,
+        "attachment",
+        FakeUploadFile("doc_final.pdf", b"2"),
+        replace=True,
+    )
+    v3 = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"3"), replace=True
+    )
 
     history = await svc.list_versions(v3.id)
     assert [f.version for f in history] == [3, 2, 1]
@@ -264,8 +307,12 @@ async def test_replace_scoped_to_record(svc: FileService) -> None:
     app_id, entity_id = uuid.uuid4(), uuid.uuid4()
     record_a, record_b = uuid.uuid4(), uuid.uuid4()
 
-    a = await svc.upload_file(app_id, entity_id, record_a, "attachment", FakeUploadFile("doc.pdf", b"a"), replace=True)
-    b = await svc.upload_file(app_id, entity_id, record_b, "attachment", FakeUploadFile("doc.pdf", b"b"), replace=True)
+    a = await svc.upload_file(
+        app_id, entity_id, record_a, "attachment", FakeUploadFile("doc.pdf", b"a"), replace=True
+    )
+    b = await svc.upload_file(
+        app_id, entity_id, record_b, "attachment", FakeUploadFile("doc.pdf", b"b"), replace=True
+    )
 
     assert a.version == 1 and b.version == 1
     assert a.previous_version_id is None and b.previous_version_id is None
@@ -278,10 +325,16 @@ async def test_replace_after_multiple_independent_uploads_does_not_error(svc: Fi
     picking "the" current latest; it should just supersede the newest one."""
     app_id, entity_id, record_id = _ids()
 
-    a = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("a.pdf", b"a"))
-    b = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("b.pdf", b"b"))
+    a = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("a.pdf", b"a")
+    )
+    b = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("b.pdf", b"b")
+    )
 
-    c = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("c.pdf", b"c"), replace=True)
+    c = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("c.pdf", b"c"), replace=True
+    )
 
     assert c.version == max(a.version, b.version) + 1
     assert c.previous_version_id in (a.id, b.id)
@@ -298,8 +351,12 @@ async def test_replace_scoped_to_field(svc: FileService) -> None:
     attached under a different field_name on the same record."""
     app_id, entity_id, record_id = _ids()
 
-    a = await svc.upload_file(app_id, entity_id, record_id, "field_one", FakeUploadFile("doc.pdf", b"a"), replace=True)
-    b = await svc.upload_file(app_id, entity_id, record_id, "field_two", FakeUploadFile("doc.pdf", b"b"), replace=True)
+    a = await svc.upload_file(
+        app_id, entity_id, record_id, "field_one", FakeUploadFile("doc.pdf", b"a"), replace=True
+    )
+    b = await svc.upload_file(
+        app_id, entity_id, record_id, "field_two", FakeUploadFile("doc.pdf", b"b"), replace=True
+    )
 
     assert a.version == 1 and b.version == 1
     assert a.previous_version_id is None and b.previous_version_id is None
@@ -314,7 +371,9 @@ async def test_replace_scoped_to_field(svc: FileService) -> None:
 async def test_list_files_filters_by_field_name(svc: FileService) -> None:
     app_id, entity_id, record_id = _ids()
     await svc.upload_file(app_id, entity_id, record_id, "field_one", FakeUploadFile("a.pdf", b"a"))
-    f2 = await svc.upload_file(app_id, entity_id, record_id, "field_two", FakeUploadFile("b.pdf", b"b"))
+    f2 = await svc.upload_file(
+        app_id, entity_id, record_id, "field_two", FakeUploadFile("b.pdf", b"b")
+    )
 
     files = await svc.list_files(record_id, field_name="field_two")
     assert [f.id for f in files] == [f2.id]
@@ -323,8 +382,12 @@ async def test_list_files_filters_by_field_name(svc: FileService) -> None:
 @pytest.mark.asyncio
 async def test_list_files_all_versions_includes_superseded(svc: FileService) -> None:
     app_id, entity_id, record_id = _ids()
-    v1 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"1"), replace=True)
-    v2 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"2"), replace=True)
+    v1 = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"1"), replace=True
+    )
+    v2 = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"2"), replace=True
+    )
 
     default_view = await svc.list_files(record_id)
     all_view = await svc.list_files(record_id, include_all_versions=True)
@@ -341,8 +404,12 @@ async def test_list_files_all_versions_includes_superseded(svc: FileService) -> 
 @pytest.mark.asyncio
 async def test_delete_latest_version_promotes_previous(svc: FileService) -> None:
     app_id, entity_id, record_id = _ids()
-    v1 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"1"), replace=True)
-    v2 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"2"), replace=True)
+    v1 = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"1"), replace=True
+    )
+    v2 = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"2"), replace=True
+    )
 
     await svc.delete_file(v2.id)
 
@@ -354,7 +421,9 @@ async def test_delete_latest_version_promotes_previous(svc: FileService) -> None
 @pytest.mark.asyncio
 async def test_delete_only_version_leaves_field_empty(svc: FileService) -> None:
     app_id, entity_id, record_id = _ids()
-    v1 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"1"))
+    v1 = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"1")
+    )
 
     await svc.delete_file(v1.id)
 
@@ -365,8 +434,12 @@ async def test_delete_only_version_leaves_field_empty(svc: FileService) -> None:
 @pytest.mark.asyncio
 async def test_delete_historical_version_does_not_disturb_latest(svc: FileService) -> None:
     app_id, entity_id, record_id = _ids()
-    v1 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"1"), replace=True)
-    v2 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"2"), replace=True)
+    v1 = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"1"), replace=True
+    )
+    v2 = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"2"), replace=True
+    )
 
     await svc.delete_file(v1.id)
 
@@ -378,7 +451,9 @@ async def test_delete_historical_version_does_not_disturb_latest(svc: FileServic
 @pytest.mark.asyncio
 async def test_delete_removes_object_from_storage(svc: FileService, storage: FakeStorage) -> None:
     app_id, entity_id, record_id = _ids()
-    v1 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"1"))
+    v1 = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"1")
+    )
 
     await svc.delete_file(v1.id)
 
@@ -387,7 +462,7 @@ async def test_delete_removes_object_from_storage(svc: FileService, storage: Fak
 
 @pytest.mark.asyncio
 async def test_delete_unknown_file_raises_not_found(svc: FileService) -> None:
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(RecordFileNotFoundError):
         await svc.delete_file(uuid.uuid4())
 
 
@@ -399,7 +474,9 @@ async def test_delete_unknown_file_raises_not_found(svc: FileService) -> None:
 @pytest.mark.asyncio
 async def test_get_download_url_returns_presigned_url(svc: FileService) -> None:
     app_id, entity_id, record_id = _ids()
-    v1 = await svc.upload_file(app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"1"))
+    v1 = await svc.upload_file(
+        app_id, entity_id, record_id, "attachment", FakeUploadFile("doc.pdf", b"1")
+    )
 
     read = await svc.get_download_url(v1.id, expires=120)
 
@@ -409,5 +486,5 @@ async def test_get_download_url_returns_presigned_url(svc: FileService) -> None:
 
 @pytest.mark.asyncio
 async def test_get_download_url_unknown_file_raises_not_found(svc: FileService) -> None:
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(RecordFileNotFoundError):
         await svc.get_download_url(uuid.uuid4())

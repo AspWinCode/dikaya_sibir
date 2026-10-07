@@ -1,10 +1,9 @@
 import uuid
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
+from sqlalchemy.ext.asyncio import AsyncSession
 
 pytestmark = pytest.mark.anyio
 
@@ -75,7 +74,9 @@ async def test_template_install_installs_module_set(client, template_admin):
     )
     assert r.status_code == 201, r.text
     body = r.json()
-    assert {"enterprise", "warehouse", "production", "finance", "analytics"} <= set(body["modules_installed"])
+    assert {"enterprise", "warehouse", "production", "finance", "analytics"} <= set(
+        body["modules_installed"]
+    )
     assert body["entities_created"] >= 10
     assert body["fields_created"] >= 20
 

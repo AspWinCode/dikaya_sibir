@@ -1,9 +1,11 @@
 """KnowledgeService: article CRUD, search, and image hosting (ТЗ 3.12)."""
+
 from __future__ import annotations
 
 import re
 import uuid
 from html import unescape
+from typing import ClassVar
 
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
@@ -66,9 +68,11 @@ class KnowledgeService:
         include_unpublished: bool = False,
         limit: int = 50,
     ) -> list[ArticleListItem]:
-        stmt = select(Article).order_by(
-            Article.display_order.asc(), Article.updated_at.desc()
-        ).limit(limit)
+        stmt = (
+            select(Article)
+            .order_by(Article.display_order.asc(), Article.updated_at.desc())
+            .limit(limit)
+        )
         if not include_unpublished:
             stmt = stmt.where(Article.is_published.is_(True))
         if category:
@@ -80,19 +84,33 @@ class KnowledgeService:
         rows = (await self._db.execute(stmt)).scalars().all()
         return [
             ArticleListItem(
-                id=a.id, slug=a.slug, title=a.title, category=a.category,
+                id=a.id,
+                slug=a.slug,
+                title=a.title,
+                category=a.category,
                 display_order=a.display_order,
-                excerpt=_excerpt(a.content), is_published=a.is_published, updated_at=a.updated_at,
+                excerpt=_excerpt(a.content),
+                is_published=a.is_published,
+                updated_at=a.updated_at,
             )
             for a in rows
         ]
 
     async def list_categories(self) -> list[str]:
-        rows = (await self._db.execute(
-            select(Article.category).where(
-                Article.is_published.is_(True), Article.category.is_not(None),
-            ).distinct()
-        )).scalars().all()
+        rows = (
+            (
+                await self._db.execute(
+                    select(Article.category)
+                    .where(
+                        Article.is_published.is_(True),
+                        Article.category.is_not(None),
+                    )
+                    .distinct()
+                )
+            )
+            .scalars()
+            .all()
+        )
         return sorted(c for c in rows if c)
 
     async def get_article(self, id_or_slug: str, include_unpublished: bool = False) -> ArticleRead:
@@ -104,9 +122,13 @@ class KnowledgeService:
     async def create_article(self, data: ArticleCreate, actor_id: uuid.UUID | None) -> ArticleRead:
         slug = data.slug or slugify(data.title)
         article = Article(
-            slug=slug, title=data.title, category=data.category,
+            slug=slug,
+            title=data.title,
+            category=data.category,
             display_order=data.display_order,
-            content=data.content, is_published=data.is_published, created_by=actor_id,
+            content=data.content,
+            is_published=data.is_published,
+            created_by=actor_id,
         )
         self._db.add(article)
         try:
@@ -151,8 +173,14 @@ class KnowledgeService:
     # Images
     # ------------------------------------------------------------------
 
-    _ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"}
-    _MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
+    _ALLOWED_IMAGE_TYPES: ClassVar[set[str]] = {
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "image/svg+xml",
+    }
+    _MAX_IMAGE_SIZE: ClassVar[int] = 10 * 1024 * 1024  # 10 MB
 
     async def upload_image(
         self,
@@ -166,7 +194,9 @@ class KnowledgeService:
         if content_type not in self._ALLOWED_IMAGE_TYPES:
             raise ImageError(f"Unsupported image type: {content_type!r}")
         if len(data) > self._MAX_IMAGE_SIZE:
-            raise ImageError(f"Image exceeds the maximum size of {self._MAX_IMAGE_SIZE // 1_048_576} MB")
+            raise ImageError(
+                f"Image exceeds the maximum size of {self._MAX_IMAGE_SIZE // 1_048_576} MB"
+            )
 
         is_clean, verdict = await av.scan_bytes(data)
         if not is_clean:
@@ -177,7 +207,10 @@ class KnowledgeService:
         await storage.upload(settings.S3_BUCKET_FILES, s3_key, data, content_type=content_type)
 
         image = ArticleImage(
-            article_id=article_id, s3_key=s3_key, content_type=content_type, created_by=actor_id,
+            article_id=article_id,
+            s3_key=s3_key,
+            content_type=content_type,
+            created_by=actor_id,
         )
         self._db.add(image)
         await self._db.flush()

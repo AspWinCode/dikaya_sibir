@@ -5,6 +5,7 @@ Run once on the server:
 
 Idempotent — skips creation if the app slug already exists.
 """
+
 import asyncio
 import uuid
 
@@ -26,9 +27,17 @@ APP_SLUG = "uchet-nomenklatury"
 
 # ── helpers ────────────────────────────────────────────────────────────────
 
-def _field(entity_id: uuid.UUID, app_id: uuid.UUID, name: str, display_name: str,
-           field_type: str, order: int, options: dict | None = None,
-           required: bool = False) -> Field:
+
+def _field(
+    entity_id: uuid.UUID,
+    app_id: uuid.UUID,
+    name: str,
+    display_name: str,
+    field_type: str,
+    order: int,
+    options: dict | None = None,
+    required: bool = False,
+) -> Field:
     return Field(
         entity_id=entity_id,
         app_id=app_id,
@@ -43,6 +52,7 @@ def _field(entity_id: uuid.UUID, app_id: uuid.UUID, name: str, display_name: str
 
 # ── main ───────────────────────────────────────────────────────────────────
 
+
 async def run() -> None:
     async with AsyncSessionLocal() as db:
         # 0. Guard — skip if already seeded
@@ -52,9 +62,9 @@ async def run() -> None:
             return
 
         # 1. Find platform admin to use as owner
-        owner = (await db.execute(
-            select(User).where(User.is_superuser.is_(True))
-        )).scalars().first()
+        owner = (
+            (await db.execute(select(User).where(User.is_superuser.is_(True)))).scalars().first()
+        )
         if not owner:
             log.error("no_superuser_found")
             return
@@ -105,13 +115,22 @@ async def run() -> None:
         await db.flush()
 
         nom_fields = [
-            _field(nom.id, app.id, "naimenovanie",   "Наименование",        FieldType.TEXT,     0, required=True),
-            _field(nom.id, app.id, "artikul",         "Артикул",             FieldType.TEXT,     1),
-            _field(nom.id, app.id, "edinitsa",        "Единица измерения",   FieldType.SELECT,   2,
-                   options={"choices": ["шт", "кг", "л", "м", "уп"]}),
-            _field(nom.id, app.id, "tsena",           "Цена",                FieldType.CURRENCY, 3),
-            _field(nom.id, app.id, "ostatok",         "Остаток",             FieldType.NUMBER,   4),
-            _field(nom.id, app.id, "opisanie",        "Описание",            FieldType.LONG_TEXT,5),
+            _field(
+                nom.id, app.id, "naimenovanie", "Наименование", FieldType.TEXT, 0, required=True
+            ),
+            _field(nom.id, app.id, "artikul", "Артикул", FieldType.TEXT, 1),
+            _field(
+                nom.id,
+                app.id,
+                "edinitsa",
+                "Единица измерения",
+                FieldType.SELECT,
+                2,
+                options={"choices": ["шт", "кг", "л", "м", "уп"]},
+            ),
+            _field(nom.id, app.id, "tsena", "Цена", FieldType.CURRENCY, 3),
+            _field(nom.id, app.id, "ostatok", "Остаток", FieldType.NUMBER, 4),
+            _field(nom.id, app.id, "opisanie", "Описание", FieldType.LONG_TEXT, 5),
         ]
         for f in nom_fields:
             db.add(f)
@@ -132,11 +151,18 @@ async def run() -> None:
         db.add(relation)
 
         # Also add FK field to Номенклатура so it's visible
-        fk_field = _field(nom.id, app.id, "kategoriya_id", "Категория", FieldType.RELATION, 6,
-                          options={"target_entity_slug": "kategoriya"})
+        fk_field = _field(
+            nom.id,
+            app.id,
+            "kategoriya_id",
+            "Категория",
+            FieldType.RELATION,
+            6,
+            options={"target_entity_slug": "kategoriya"},
+        )
         db.add(fk_field)
         await db.flush()
-        nom.field_order = nom.field_order + [str(fk_field.id)]
+        nom.field_order = [*nom.field_order, str(fk_field.id)]
 
         log.info("relation_created", from_entity="nomenklatura", to_entity="kategoriya")
 
@@ -149,14 +175,23 @@ async def run() -> None:
                 icon="📦",
                 nav_order=0,
                 is_published=True,
-                blocks=[{
-                    "id": str(uuid.uuid4()),
-                    "type": "table",
-                    "config": {
-                        "entity_slug": "nomenklatura",
-                        "fields": ["naimenovanie", "artikul", "edinitsa", "tsena", "ostatok", "kategoriya_id"],
-                    },
-                }],
+                blocks=[
+                    {
+                        "id": str(uuid.uuid4()),
+                        "type": "table",
+                        "config": {
+                            "entity_slug": "nomenklatura",
+                            "fields": [
+                                "naimenovanie",
+                                "artikul",
+                                "edinitsa",
+                                "tsena",
+                                "ostatok",
+                                "kategoriya_id",
+                            ],
+                        },
+                    }
+                ],
             ),
             Page(
                 app_id=app.id,
@@ -165,15 +200,25 @@ async def run() -> None:
                 icon="➕",
                 nav_order=1,
                 is_published=True,
-                blocks=[{
-                    "id": str(uuid.uuid4()),
-                    "type": "form",
-                    "config": {
-                        "entity_slug": "nomenklatura",
-                        "fields": ["naimenovanie", "artikul", "edinitsa", "tsena", "ostatok", "kategoriya_id", "opisanie"],
-                        "submit_label": "Сохранить",
-                    },
-                }],
+                blocks=[
+                    {
+                        "id": str(uuid.uuid4()),
+                        "type": "form",
+                        "config": {
+                            "entity_slug": "nomenklatura",
+                            "fields": [
+                                "naimenovanie",
+                                "artikul",
+                                "edinitsa",
+                                "tsena",
+                                "ostatok",
+                                "kategoriya_id",
+                                "opisanie",
+                            ],
+                            "submit_label": "Сохранить",
+                        },
+                    }
+                ],
             ),
             Page(
                 app_id=app.id,
@@ -219,7 +264,13 @@ async def run() -> None:
                         "type": "table",
                         "config": {
                             "entity_slug": "nomenklatura",
-                            "fields": ["naimenovanie", "artikul", "tsena", "ostatok", "kategoriya_id"],
+                            "fields": [
+                                "naimenovanie",
+                                "artikul",
+                                "tsena",
+                                "ostatok",
+                                "kategoriya_id",
+                            ],
                             "label": "Полный список",
                         },
                     },
@@ -232,7 +283,7 @@ async def run() -> None:
         await db.commit()
         log.info("nomenclature_app_seeded", app_id=str(app.id), pages=len(pages))
         print(f"\n✅ Приложение создано! ID: {app.id}")
-        print(f"   Откройте: http://155.212.164.251:8090/editor\n")
+        print("   Откройте: http://155.212.164.251:8090/editor\n")
 
 
 if __name__ == "__main__":

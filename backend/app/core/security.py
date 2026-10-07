@@ -61,7 +61,7 @@ def create_refresh_token(user_id: UUID) -> str:
 
 def decode_token(token: str) -> dict[str, Any]:
     """Raises JWTError on invalid/expired token."""
-    return jwt.decode(  # type: ignore[no-any-return]
+    return jwt.decode(
         token,
         settings.JWT_PUBLIC_KEY,
         algorithms=[settings.JWT_ALGORITHM],
@@ -69,10 +69,10 @@ def decode_token(token: str) -> dict[str, Any]:
 
 
 __all__ = [
-    "hash_password",
-    "verify_password",
+    "JWTError",
     "create_access_token",
     "create_refresh_token",
     "decode_token",
-    "JWTError",
+    "hash_password",
+    "verify_password",
 ]

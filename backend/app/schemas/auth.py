@@ -27,7 +27,7 @@ class VkCallbackRequest(BaseModel):
 class TokenPair(BaseModel):
     access_token: str
     refresh_token: str
-    token_type: str = "bearer"
+    token_type: str = "bearer"  # noqa: S105 — the OAuth2 token-type literal, not a credential
     expires_in: int  # seconds
 
 
@@ -90,7 +90,7 @@ class SessionPolicyRead(BaseModel):
 
 
 class SessionPolicyUpdate(BaseModel):
-    timeout_minutes: int | None = Field(default=None, ge=1, le=10080)   # max 7 days
+    timeout_minutes: int | None = Field(default=None, ge=1, le=10080)  # max 7 days
     max_concurrent_sessions: int | None = Field(default=None, ge=0, le=100)  # 0 = unlimited
 
 
@@ -121,6 +121,7 @@ class FilePolicyUpdate(BaseModel):
 
 
 import uuid as _uuid  # noqa: E402
+
 
 class SessionRead(BaseModel):
     id: _uuid.UUID

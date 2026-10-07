@@ -3,15 +3,14 @@
 Email delivery is mocked (no real SMTP in CI); see DEPLOY.md for how to
 verify real SMTP delivery on a deployed environment.
 """
-import re
-from urllib.parse import urlparse, parse_qs
+
+from urllib.parse import parse_qs, urlparse
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import hash_password
 from app.models.identity import User
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.fixture()
@@ -52,9 +51,7 @@ async def test_forgot_password_is_neutral_for_unknown_email(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     captured = _capture_reset_url(monkeypatch)
-    resp = await client.post(
-        "/api/v1/auth/forgot-password", json={"email": "nobody@example.com"}
-    )
+    resp = await client.post("/api/v1/auth/forgot-password", json={"email": "nobody@example.com"})
     # Same 204 regardless of whether the account exists — no user enumeration.
     assert resp.status_code == 204
     assert captured == []  # and no email was actually sent
@@ -67,9 +64,7 @@ async def test_password_reset_end_to_end(
 ) -> None:
     captured = _capture_reset_url(monkeypatch)
 
-    resp = await client.post(
-        "/api/v1/auth/forgot-password", json={"email": reset_user.email}
-    )
+    resp = await client.post("/api/v1/auth/forgot-password", json={"email": reset_user.email})
     assert resp.status_code == 204
     assert len(captured) == 1
     token = _extract_token(captured[0])
@@ -158,12 +153,11 @@ async def test_forgot_password_does_not_fail_the_request_when_smtp_is_down(
 ) -> None:
     """send_email swallows SMTP errors; the user must still get the neutral
     204 response, never a 500 with a stack trace."""
+
     async def failing_send(*args, **kwargs):
         return False
 
     monkeypatch.setattr("app.services.email.send_email", failing_send)
 
-    resp = await client.post(
-        "/api/v1/auth/forgot-password", json={"email": reset_user.email}
-    )
+    resp = await client.post("/api/v1/auth/forgot-password", json={"email": reset_user.email})
     assert resp.status_code == 204

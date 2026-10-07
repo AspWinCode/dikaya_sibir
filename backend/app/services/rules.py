@@ -1,10 +1,9 @@
 """RuleService: CRUD, cycle detection, dry-run, trigger dispatch."""
-import time
+
 import uuid
-from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine.graph import (
@@ -12,10 +11,8 @@ from app.engine.graph import (
     extract_rule_nodes,
     find_cycles,
 )
-from app.engine.interpreter import ExecutionContext, ExecutionResult, run_rule
-from app.models.data import Record
+from app.engine.interpreter import ExecutionContext, run_rule
 from app.models.logic import Rule, RuleConflictLog, RuleExecutionLog, RuleWebhookDelivery
-from app.schemas.common import CursorPage
 from app.schemas.rules import (
     MAX_STEPS,
     CycleCheckResponse,
@@ -71,7 +68,11 @@ class RuleService:
         entity_id: uuid.UUID | None = None,
         active_only: bool = False,
     ) -> list[RuleRead]:
-        stmt = select(Rule).where(Rule.app_id == app_id).order_by(Rule.priority.asc(), Rule.created_at.asc())
+        stmt = (
+            select(Rule)
+            .where(Rule.app_id == app_id)
+            .order_by(Rule.priority.asc(), Rule.created_at.asc())
+        )
         if entity_id:
             stmt = stmt.where(Rule.entity_id == entity_id)
         if active_only:
@@ -346,7 +347,7 @@ class RuleService:
             },
             queue="sandbox",
         )
-        return task.id
+        return str(task.id) if task.id is not None else None
 
     # ------------------------------------------------------------------
     # Execution log
@@ -465,9 +466,7 @@ class RuleService:
             for r in result.scalars()
         ]
 
-    async def _assert_no_cycles(
-        self, app_id: uuid.UUID, activating_rule_id: uuid.UUID
-    ) -> None:
+    async def _assert_no_cycles(self, app_id: uuid.UUID, activating_rule_id: uuid.UUID) -> None:
         """Raise RuleCycleError if activating this rule creates a cycle."""
         rules_raw = await self._get_rules_raw(app_id, active_only=False)
         # Mark the rule being activated as active for cycle check

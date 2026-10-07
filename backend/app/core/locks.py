@@ -47,11 +47,13 @@ class EditLock:
         self._holder_name = holder_name
 
     async def acquire(self) -> None:
-        value = json.dumps({
-            "user_id": self._user_id,
-            "holder_name": self._holder_name,
-            "acquired_at": datetime.now(UTC).isoformat(),
-        })
+        value = json.dumps(
+            {
+                "user_id": self._user_id,
+                "holder_name": self._holder_name,
+                "acquired_at": datetime.now(UTC).isoformat(),
+            }
+        )
         # SET NX (only if not exists)
         acquired = await self._redis.set(self._key, value, ex=LOCK_TTL, nx=True)
         if not acquired:

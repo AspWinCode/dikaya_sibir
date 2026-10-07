@@ -88,9 +88,7 @@ class AuthService:
 
         # Update last_login_at
         await self._db.execute(
-            update(User)
-            .where(User.id == user.id)
-            .values(last_login_at=datetime.now(UTC))
+            update(User).where(User.id == user.id).values(last_login_at=datetime.now(UTC))
         )
 
         auth_attempts.labels(result="success").inc()
@@ -135,8 +133,10 @@ class AuthService:
             raise AuthError("Refresh token not found or revoked")
 
         # Check inactivity timeout
-        from app.services.session_policy import SessionPolicyService
         from datetime import timedelta
+
+        from app.services.session_policy import SessionPolicyService
+
         policy = await SessionPolicyService(self._db).get()
         if policy.timeout_minutes > 0:
             last = db_token.last_activity_at or db_token.created_at
@@ -162,9 +162,7 @@ class AuthService:
     async def logout(self, raw_refresh_token: str) -> None:
         token_hash = _hash_token(raw_refresh_token)
         await self._db.execute(
-            update(RefreshToken)
-            .where(RefreshToken.token_hash == token_hash)
-            .values(revoked=True)
+            update(RefreshToken).where(RefreshToken.token_hash == token_hash).values(revoked=True)
         )
 
     async def logout_all(self, user_id: uuid.UUID) -> None:
@@ -178,8 +176,8 @@ class AuthService:
     # Change password
     # ------------------------------------------------------------------
     async def change_password(self, user_id: uuid.UUID, req: ChangePasswordRequest) -> None:
-        from app.services.password_policy import PasswordPolicyService
         from app.core.password_policy import PasswordPolicyError
+        from app.services.password_policy import PasswordPolicyService
 
         user = await self._get_active_user_by_id(user_id)
         if not user.password_hash or not verify_password(req.current_password, user.password_hash):
@@ -213,6 +211,7 @@ class AuthService:
     # ------------------------------------------------------------------
     async def request_password_reset(self, req: ForgotPasswordRequest) -> None:
         from datetime import timedelta
+
         from app.services.email import send_password_reset_email
 
         result = await self._db.execute(
@@ -227,11 +226,13 @@ class AuthService:
         token_hash = _hash_token(raw_token)
         expires_at = datetime.now(UTC) + timedelta(hours=1)
 
-        self._db.add(PasswordResetToken(
-            user_id=user.id,
-            token_hash=token_hash,
-            expires_at=expires_at,
-        ))
+        self._db.add(
+            PasswordResetToken(
+                user_id=user.id,
+                token_hash=token_hash,
+                expires_at=expires_at,
+            )
+        )
         await self._db.flush()
 
         reset_url = f"{settings.FRONTEND_URL}/reset-password?token={raw_token}"
@@ -293,9 +294,7 @@ class AuthService:
             name=user.email, issuer_name="No-Code Platform"
         )
         # Persist secret (not yet enabled — user must verify first)
-        await self._db.execute(
-            update(User).where(User.id == user.id).values(totp_secret=secret)
-        )
+        await self._db.execute(update(User).where(User.id == user.id).values(totp_secret=secret))
         return TOTPSetupResponse(secret=secret, provisioning_uri=uri)
 
     async def totp_enable(self, user: User, code: str) -> None:
@@ -303,9 +302,7 @@ class AuthService:
             raise AuthError("TOTP not configured", status_code=400)
         if not self._verify_totp(user.totp_secret, code):
             raise AuthError("Invalid TOTP code", status_code=403)
-        await self._db.execute(
-            update(User).where(User.id == user.id).values(totp_enabled=True)
-        )
+        await self._db.execute(update(User).where(User.id == user.id).values(totp_enabled=True))
 
     async def totp_disable(self, user: User, code: str) -> None:
         if not user.totp_enabled or not user.totp_secret:
@@ -313,9 +310,7 @@ class AuthService:
         if not self._verify_totp(user.totp_secret, code):
             raise AuthError("Invalid TOTP code", status_code=403)
         await self._db.execute(
-            update(User)
-            .where(User.id == user.id)
-            .values(totp_secret=None, totp_enabled=False)
+            update(User).where(User.id == user.id).values(totp_secret=None, totp_enabled=False)
         )
 
     # ------------------------------------------------------------------
@@ -331,7 +326,10 @@ class AuthService:
 
         now = datetime.now(UTC)
         access = create_access_token(
-            user.id, user.role_ids, org_id=user.org_id, email=user.email,
+            user.id,
+            user.role_ids,
+            org_id=user.org_id,
+            email=user.email,
             must_change_password=user.must_change_password,
         )
         refresh = create_refresh_token(user.id)
@@ -429,6 +427,7 @@ class AuthService:
 
         if user is None:
             from app.core.security import hash_password as _hp
+
             user = User(
                 email=req.email,
                 display_name=ldap_user["display_name"],
@@ -444,8 +443,12 @@ class AuthService:
         )
         auth_attempts.labels(result="ldap_success").inc()
         await AuditService(self._db).log(
-            "login_ldap", user_id=user.id, actor_email=user.email,
-            level="info", ip_address=ip, user_agent=user_agent,
+            "login_ldap",
+            user_id=user.id,
+            actor_email=user.email,
+            level="info",
+            ip_address=ip,
+            user_agent=user_agent,
         )
         return await self._issue_tokens(user, user_agent=user_agent, ip=ip)
 
@@ -455,6 +458,7 @@ class AuthService:
     @staticmethod
     def yandex_auth_url() -> str:
         from urllib.parse import urlencode
+
         params = {
             "response_type": "code",
             "client_id": settings.YANDEX_CLIENT_ID,
@@ -523,8 +527,12 @@ class AuthService:
         )
         auth_attempts.labels(result="yandex_success").inc()
         await AuditService(self._db).log(
-            "login_yandex", user_id=user.id, actor_email=user.email,
-            level="info", ip_address=ip, user_agent=user_agent,
+            "login_yandex",
+            user_id=user.id,
+            actor_email=user.email,
+            level="info",
+            ip_address=ip,
+            user_agent=user_agent,
         )
         return await self._issue_tokens(user, user_agent=user_agent, ip=ip)
 
@@ -534,6 +542,7 @@ class AuthService:
     @staticmethod
     def vk_auth_url() -> str:
         from urllib.parse import urlencode
+
         params = {
             "client_id": settings.VK_CLIENT_ID,
             "redirect_uri": settings.VK_REDIRECT_URI,
@@ -590,7 +599,9 @@ class AuthService:
             users = info_resp.json().get("response", [])
             if users:
                 u = users[0]
-                display_name = f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or email
+                display_name = (
+                    f"{u.get('first_name', '')} {u.get('last_name', '')}".strip() or email
+                )
 
         # Find or create local user
         stmt = select(User).where(User.email == email)
@@ -613,8 +624,12 @@ class AuthService:
         )
         auth_attempts.labels(result="vk_success").inc()
         await AuditService(self._db).log(
-            "login_vk", user_id=user.id, actor_email=user.email,
-            level="info", ip_address=ip, user_agent=user_agent,
+            "login_vk",
+            user_id=user.id,
+            actor_email=user.email,
+            level="info",
+            ip_address=ip,
+            user_agent=user_agent,
         )
         return await self._issue_tokens(user, user_agent=user_agent, ip=ip)
 

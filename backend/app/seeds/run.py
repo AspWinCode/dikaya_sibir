@@ -11,6 +11,7 @@ import asyncio
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
@@ -23,16 +24,16 @@ logger = structlog.get_logger(__name__)
 
 ROLES = [
     {"id": "platform_admin", "display_name": "Администратор платформы"},
-    {"id": "org_admin",      "display_name": "Администратор организации"},
-    {"id": "app_builder",    "display_name": "Конструктор приложений"},
-    {"id": "app_admin",      "display_name": "Администратор приложения"},
-    {"id": "auditor",        "display_name": "Аудитор"},
+    {"id": "org_admin", "display_name": "Администратор организации"},
+    {"id": "app_builder", "display_name": "Конструктор приложений"},
+    {"id": "app_admin", "display_name": "Администратор приложения"},
+    {"id": "auditor", "display_name": "Аудитор"},
 ]
 
 ADMIN_ROLES = ["platform_admin", "app_builder"]
 
 
-async def _seed_roles(session) -> None:
+async def _seed_roles(session: AsyncSession) -> None:
     existing = set((await session.execute(select(Role.id))).scalars().all())
     for role in ROLES:
         if role["id"] not in existing:
@@ -40,10 +41,8 @@ async def _seed_roles(session) -> None:
     logger.info("seed_roles", total=len(ROLES), created=len(ROLES) - len(existing))
 
 
-async def _seed_admin(session) -> None:
-    result = await session.execute(
-        select(User).where(User.email == settings.SEED_ADMIN_EMAIL)
-    )
+async def _seed_admin(session: AsyncSession) -> None:
+    result = await session.execute(select(User).where(User.email == settings.SEED_ADMIN_EMAIL))
     user = result.scalar_one_or_none()
     if user is not None:
         logger.info("seed_admin_exists", email=settings.SEED_ADMIN_EMAIL, user_id=str(user.id))

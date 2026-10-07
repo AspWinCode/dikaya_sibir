@@ -7,10 +7,10 @@ Unit:
   - cron field/tick matching in the periodic sweep task
   - date parsing for relative_date candidates
 """
+
 from datetime import UTC, datetime
 
 import pytest
-
 from app.schemas.rules import RuleTrigger
 from app.worker.tasks.rules_schedule import _cron_matches_now, _parse_date
 
@@ -18,7 +18,8 @@ from app.worker.tasks.rules_schedule import _cron_matches_now, _parse_date
 class TestRuleTriggerScheduleValidation:
     def test_cron_trigger_is_valid(self) -> None:
         t = RuleTrigger(
-            event="schedule", schedule_kind="cron",
+            event="schedule",
+            schedule_kind="cron",
             cron={"minute": "0", "hour": "0", "day_of_month": "1"},
         )
         assert t.cron is not None
@@ -26,7 +27,8 @@ class TestRuleTriggerScheduleValidation:
 
     def test_relative_date_trigger_is_valid(self) -> None:
         t = RuleTrigger(
-            event="schedule", schedule_kind="relative_date",
+            event="schedule",
+            schedule_kind="relative_date",
             relative_date={"date_field": "due_date", "offset_days": -3},
         )
         assert t.relative_date is not None
@@ -63,27 +65,57 @@ class TestRuleTriggerScheduleValidation:
 
 class TestCronMatchesNow:
     def test_wildcard_matches_any_tick(self) -> None:
-        cron = {"minute": "0", "hour": "*", "day_of_month": "*", "month_of_year": "*", "day_of_week": "*"}
+        cron = {
+            "minute": "0",
+            "hour": "*",
+            "day_of_month": "*",
+            "month_of_year": "*",
+            "day_of_week": "*",
+        }
         assert _cron_matches_now(cron, datetime(2026, 3, 17, 5, 0, tzinfo=UTC))
         assert _cron_matches_now(cron, datetime(2026, 3, 17, 23, 0, tzinfo=UTC))
 
     def test_monthly_first_only_matches_first_of_month(self) -> None:
-        cron = {"minute": "0", "hour": "0", "day_of_month": "1", "month_of_year": "*", "day_of_week": "*"}
+        cron = {
+            "minute": "0",
+            "hour": "0",
+            "day_of_month": "1",
+            "month_of_year": "*",
+            "day_of_week": "*",
+        }
         assert _cron_matches_now(cron, datetime(2026, 3, 1, 0, 0, tzinfo=UTC))
         assert not _cron_matches_now(cron, datetime(2026, 3, 2, 0, 0, tzinfo=UTC))
 
     def test_hour_mismatch_does_not_match(self) -> None:
-        cron = {"minute": "0", "hour": "9", "day_of_month": "*", "month_of_year": "*", "day_of_week": "*"}
+        cron = {
+            "minute": "0",
+            "hour": "9",
+            "day_of_month": "*",
+            "month_of_year": "*",
+            "day_of_week": "*",
+        }
         assert not _cron_matches_now(cron, datetime(2026, 3, 1, 10, 0, tzinfo=UTC))
 
     def test_comma_separated_hours(self) -> None:
-        cron = {"minute": "0", "hour": "9,18", "day_of_month": "*", "month_of_year": "*", "day_of_week": "*"}
+        cron = {
+            "minute": "0",
+            "hour": "9,18",
+            "day_of_month": "*",
+            "month_of_year": "*",
+            "day_of_week": "*",
+        }
         assert _cron_matches_now(cron, datetime(2026, 3, 1, 9, 0, tzinfo=UTC))
         assert _cron_matches_now(cron, datetime(2026, 3, 1, 18, 0, tzinfo=UTC))
         assert not _cron_matches_now(cron, datetime(2026, 3, 1, 12, 0, tzinfo=UTC))
 
     def test_malformed_field_never_matches(self) -> None:
-        cron = {"minute": "0", "hour": "not-a-number", "day_of_month": "*", "month_of_year": "*", "day_of_week": "*"}
+        cron = {
+            "minute": "0",
+            "hour": "not-a-number",
+            "day_of_month": "*",
+            "month_of_year": "*",
+            "day_of_week": "*",
+        }
         assert not _cron_matches_now(cron, datetime(2026, 3, 1, 0, 0, tzinfo=UTC))
 
 

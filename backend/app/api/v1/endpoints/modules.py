@@ -4,7 +4,12 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import AuthDep, DbDep
 from app.schemas.modules import AppModuleRead, ModuleInstallResult, ModuleRead
-from app.services.modules import ModuleDependencyError, ModuleNotFoundError, ModulePermissionError, ModuleService
+from app.services.modules import (
+    AppModuleNotFoundError,
+    ModuleDependencyError,
+    ModulePermissionError,
+    ModuleService,
+)
 
 router = APIRouter(tags=["modules"])
 
@@ -23,7 +28,9 @@ async def list_modules(
 
 
 @router.get("/apps/{app_id}/modules", response_model=list[AppModuleRead])
-async def list_app_modules(app_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> list[AppModuleRead]:
+async def list_app_modules(
+    app_id: uuid.UUID, current_user: AuthDep, db: DbDep
+) -> list[AppModuleRead]:
     return await _service(db).list_app_modules(app_id)
 
 
@@ -40,7 +47,7 @@ async def install_module(
             module_code,
             actor_id=current_user.user_id,
         )
-    except ModuleNotFoundError as exc:
+    except AppModuleNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ModulePermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
@@ -61,7 +68,7 @@ async def uninstall_module(
         )
     except ModuleDependencyError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except ModuleNotFoundError as exc:
+    except AppModuleNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ModulePermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc

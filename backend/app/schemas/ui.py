@@ -1,4 +1,5 @@
 """UI Builder schemas — views, field configs, pages."""
+
 import uuid
 from datetime import datetime
 from enum import Enum
@@ -6,22 +7,23 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-
 # ------------------------------------------------------------------
 # View types + config envelopes
 # ------------------------------------------------------------------
 
+
 class ViewType(str, Enum):
-    TABLE    = "table"
-    FORM     = "form"
-    KANBAN   = "kanban"
+    TABLE = "table"
+    FORM = "form"
+    KANBAN = "kanban"
     CALENDAR = "calendar"
-    GALLERY  = "gallery"
-    DETAIL   = "detail"
+    GALLERY = "gallery"
+    DETAIL = "detail"
 
 
 class TableConfig(BaseModel):
     """Column order, row height, frozen columns, default sort/filter."""
+
     columns: list[str] = Field(default_factory=list)
     sort: list[dict[str, Any]] = Field(default_factory=list)
     filters: list[dict[str, Any]] = Field(default_factory=list)
@@ -53,6 +55,7 @@ class FormConfig(BaseModel):
 # ------------------------------------------------------------------
 # View
 # ------------------------------------------------------------------
+
 
 class ViewRead(BaseModel):
     id: uuid.UUID
@@ -86,18 +89,19 @@ class ViewUpdate(BaseModel):
 # ViewFieldConfig
 # ------------------------------------------------------------------
 
+
 class WidgetType(str, Enum):
-    DEFAULT     = "default"
-    TEXT        = "text"
-    RICH_TEXT   = "rich_text"
-    NUMBER      = "number"
-    CHECKBOX    = "checkbox"
+    DEFAULT = "default"
+    TEXT = "text"
+    RICH_TEXT = "rich_text"
+    NUMBER = "number"
+    CHECKBOX = "checkbox"
     DATE_PICKER = "date_picker"
-    SELECT      = "select"
+    SELECT = "select"
     FILE_UPLOAD = "file_upload"
-    IMAGE       = "image"
-    RELATION    = "relation"
-    FORMULA     = "formula"
+    IMAGE = "image"
+    RELATION = "relation"
+    FORMULA = "formula"
 
 
 class ViewFieldConfigItem(BaseModel):
@@ -118,6 +122,7 @@ class ViewFieldConfigRead(ViewFieldConfigItem):
 
 class ViewFieldConfigBulkUpdate(BaseModel):
     """Full replacement of all field configs for a view."""
+
     fields: list[ViewFieldConfigItem] = Field(max_length=200)
 
     @field_validator("fields")
@@ -133,41 +138,42 @@ class ViewFieldConfigBulkUpdate(BaseModel):
 # Page blocks
 # ------------------------------------------------------------------
 
+
 class BlockType(str, Enum):
     # Input
-    TEXT_FIELD       = "text_field"
-    NUMBER_FIELD     = "number_field"
-    DATE_FIELD       = "date_field"
-    DROPDOWN         = "dropdown"
-    TOGGLE           = "toggle"
-    CHECKBOX         = "checkbox"
-    FILE_UPLOAD      = "file_upload"
-    LOOKUP           = "lookup"
-    FORM             = "form"
+    TEXT_FIELD = "text_field"
+    NUMBER_FIELD = "number_field"
+    DATE_FIELD = "date_field"
+    DROPDOWN = "dropdown"
+    TOGGLE = "toggle"
+    CHECKBOX = "checkbox"
+    FILE_UPLOAD = "file_upload"
+    LOOKUP = "lookup"
+    FORM = "form"
     POSITIONS_PICKER = "positions_picker"
     # Display
-    TABLE        = "table"
-    RECORD_CARD  = "record_card"
-    METRIC       = "metric"
-    KPI          = "kpi"
-    CHART        = "chart"
-    PIVOT        = "pivot"
-    CALENDAR     = "calendar"
-    KANBAN       = "kanban"
-    GANTT        = "gantt"
-    TREE         = "tree"
-    RICH_TEXT    = "rich_text"
-    VIEW         = "view"
+    TABLE = "table"
+    RECORD_CARD = "record_card"
+    METRIC = "metric"
+    KPI = "kpi"
+    CHART = "chart"
+    PIVOT = "pivot"
+    CALENDAR = "calendar"
+    KANBAN = "kanban"
+    GANTT = "gantt"
+    TREE = "tree"
+    RICH_TEXT = "rich_text"
+    VIEW = "view"
     # Action
-    BUTTON       = "button"
-    IMPORT       = "import"
-    EXPORT       = "export"
+    BUTTON = "button"
+    IMPORT = "import"
+    EXPORT = "export"
     # Container
-    MODAL        = "modal"
-    TABS         = "tabs"
+    MODAL = "modal"
+    TABS = "tabs"
     FILTER_PANEL = "filter_panel"
-    DIVIDER      = "divider"
-    IFRAME       = "iframe"
+    DIVIDER = "divider"
+    IFRAME = "iframe"
 
 
 class PageBlock(BaseModel):
@@ -186,10 +192,11 @@ class PageBlock(BaseModel):
 # Page
 # ------------------------------------------------------------------
 
+
 class LayoutType(str, Enum):
-    FULL_WIDTH  = "full_width"
-    SIDEBAR     = "sidebar"
-    TWO_COLUMN  = "two_column"
+    FULL_WIDTH = "full_width"
+    SIDEBAR = "sidebar"
+    TWO_COLUMN = "two_column"
 
 
 class PageLayout(BaseModel):
@@ -216,7 +223,8 @@ class PageRead(BaseModel):
 
 class PageCreate(BaseModel):
     slug: str = Field(
-        min_length=1, max_length=128,
+        min_length=1,
+        max_length=128,
         pattern=r"^[a-z0-9-]+$",
         description="URL slug: lowercase, digits, hyphens",
     )
@@ -241,6 +249,7 @@ class PageUpdate(BaseModel):
 # Page role permissions
 # ------------------------------------------------------------------
 
+
 class PageRolePermissionRead(BaseModel):
     page_id: uuid.UUID
     role_id: str
@@ -260,6 +269,7 @@ class PagePermissionsSet(BaseModel):
 # ------------------------------------------------------------------
 # Nav reorder
 # ------------------------------------------------------------------
+
 
 class PageNavReorderItem(BaseModel):
     page_id: uuid.UUID

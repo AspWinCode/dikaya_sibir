@@ -1,5 +1,4 @@
 from typing import Any, Generic, TypeVar
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,6 +24,7 @@ class ErrorDetail(BaseModel):
 
 class ProblemDetail(BaseModel):
     """RFC 7807 Problem Details."""
+
     type: str = "about:blank"
     title: str
     status: int

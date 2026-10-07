@@ -1,4 +1,5 @@
 """Document registrar + номенклатура дел (ТЗ 3.10)."""
+
 import uuid
 from datetime import date, datetime
 
@@ -14,6 +15,7 @@ class DocTypeConfig(Base):
     поддерживает префикс/суффикс, год, месяц, порядковый номер, код
     подразделения). Lazily created with defaults, same pattern as
     identity.password_policy/session_policy/file_policy."""
+
     __tablename__ = "doc_type_config"
     __table_args__ = (
         UniqueConstraint("app_id", "doc_type", name="uq_doc_type_config_app_type"),
@@ -22,7 +24,9 @@ class DocTypeConfig(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     app_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
-    doc_type: Mapped[str] = mapped_column(String(16), nullable=False)  # incoming | outgoing | internal
+    doc_type: Mapped[str] = mapped_column(
+        String(16), nullable=False
+    )  # incoming | outgoing | internal
     prefix: Mapped[str] = mapped_column(String(32), nullable=False, default="")
     suffix: Mapped[str] = mapped_column(String(32), nullable=False, default="")
     include_department: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -35,6 +39,7 @@ class DocTypeConfig(Base):
 class RegistrationCounter(Base):
     """Atomic per-(app, doc_type, department, year, month) counter. Rows are
     created on demand via INSERT ... ON CONFLICT — see RegistrarService."""
+
     __tablename__ = "registration_counter"
     __table_args__ = {"schema": "data"}
 
@@ -49,9 +54,12 @@ class RegistrationCounter(Base):
 class DocumentRegistration(Base):
     """One row per registered document — links an arbitrary entity record to
     its assigned registration number (ТЗ 3.10.1)."""
+
     __tablename__ = "document_registration"
     __table_args__ = (
-        UniqueConstraint("app_id", "doc_type", "registration_no", name="uq_document_registration_no"),
+        UniqueConstraint(
+            "app_id", "doc_type", "registration_no", name="uq_document_registration_no"
+        ),
         {"schema": "data"},
     )
 
@@ -73,6 +81,7 @@ class DocumentRegistration(Base):
 
 class FilingCase(Base):
     """Номенклатура дел (ТЗ 3.10.2) — a hierarchical filing classifier."""
+
     __tablename__ = "filing_case"
     __table_args__ = (
         UniqueConstraint("app_id", "index_code", name="uq_filing_case_app_index"),

@@ -20,6 +20,7 @@ BearerDep = Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme
 
 class CurrentUser:
     """Parsed JWT claims attached to the request."""
+
     def __init__(
         self, user_id: UUID, roles: list[str], org_id: UUID | None = None, email: str | None = None
     ) -> None:

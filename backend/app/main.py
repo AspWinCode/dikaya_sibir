@@ -7,7 +7,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -16,7 +15,6 @@ from starlette.responses import Response
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.logging import configure_logging
-from app.core.metrics import record_operations  # ensure metrics are registered
 from app.core.rate_limit import limiter, rate_limit_exceeded_handler
 from app.core.telemetry import configure_telemetry, instrument_fastapi
 from app.schemas.common import ErrorDetail, ProblemDetail
@@ -29,12 +27,14 @@ logger = structlog.get_logger(__name__)
 # Request metrics middleware
 # ------------------------------------------------------------------
 
+
 class PrometheusMiddleware(BaseHTTPMiddleware):
     """
     Track HTTP request count and latency per (method, path, status).
     Uses prometheus_client histograms — complements business metrics
     defined in app.core.metrics.
     """
+
     from prometheus_client import Counter, Histogram
 
     _requests = Counter(
@@ -51,6 +51,7 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
         import time
+
         start = time.monotonic()
         response: Response = await call_next(request)
         duration = time.monotonic() - start
@@ -67,6 +68,7 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
 # ------------------------------------------------------------------
 # Lifespan
 # ------------------------------------------------------------------
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> Any:
@@ -119,14 +121,12 @@ app.mount("/metrics", metrics_app)
 # Exception handlers
 # ------------------------------------------------------------------
 
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    errors = [
-        ErrorDetail(loc=list(e["loc"]), msg=e["msg"], type=e["type"])
-        for e in exc.errors()
-    ]
+    errors = [ErrorDetail(loc=list(e["loc"]), msg=e["msg"], type=e["type"]) for e in exc.errors()]
     body = ProblemDetail(
         title="Validation Error",
         status=status.HTTP_422_UNPROCESSABLE_ENTITY,

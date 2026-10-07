@@ -13,6 +13,7 @@ values from OTHER entities' records — e.g. "хватает ли материа
 рецепту" needs to read рецепты and номенклатура, not just the деталь
 отчёта record being saved.
 """
+
 import uuid
 
 import structlog
@@ -20,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine.interpreter import ExecutionContext, RuleError, evaluate_conditions
-from app.engine.lookup import LookupError, resolve_lookups
+from app.engine.lookup import RuleLookupError, resolve_lookups
 from app.models.logic import Rule
 
 logger = structlog.get_logger(__name__)
@@ -54,12 +55,14 @@ class ValidationRuleService:
         writes, so callers can run this before add()/flush() with nothing to
         roll back if it raises."""
         result = await self._db.execute(
-            select(Rule).where(
+            select(Rule)
+            .where(
                 Rule.app_id == app_id,
                 Rule.entity_id == entity_id,
                 Rule.rule_type == "validation",
                 Rule.is_active.is_(True),
-            ).order_by(Rule.priority.asc())
+            )
+            .order_by(Rule.priority.asc())
         )
         rules = list(result.scalars().all())
         if not rules:
@@ -77,9 +80,12 @@ class ValidationRuleService:
 
         for rule in rules:
             trigger_event = (rule.trigger or {}).get("event", "")
-            if trigger_event and trigger_event != event:
-                if not (trigger_event == "field.changed" and event == "record.updated"):
-                    continue
+            if (
+                trigger_event
+                and trigger_event != event
+                and not (trigger_event == "field.changed" and event == "record.updated")
+            ):
+                continue
             if trigger_event == "field.changed":
                 watch_fields = set((rule.trigger or {}).get("watch_fields", []))
                 if watch_fields and not (watch_fields & set(ctx.changed_fields)):
@@ -88,9 +94,12 @@ class ValidationRuleService:
             try:
                 resolved_conditions = await resolve_lookups(rule.conditions, self._db, ctx)
                 matched = evaluate_conditions(resolved_conditions, ctx)
-            except (RuleError, LookupError) as exc:
+            except (RuleError, RuleLookupError) as exc:
                 logger.warning(
-                    "validation_rule_error", rule_id=str(rule.id), entity_id=str(entity_id), error=str(exc),
+                    "validation_rule_error",
+                    rule_id=str(rule.id),
+                    entity_id=str(entity_id),
+                    error=str(exc),
                 )
                 continue
             if not matched:
@@ -100,6 +109,8 @@ class ValidationRuleService:
                 if action.get("type") == "block_save":
                     message = action.get("message") or "Сохранение отклонено правилом проверки"
                     logger.info(
-                        "validation_rule_blocked", rule_id=str(rule.id), entity_id=str(entity_id),
+                        "validation_rule_blocked",
+                        rule_id=str(rule.id),
+                        entity_id=str(entity_id),
                     )
                     raise ValidationBlockedError(message, rule_id=rule.id)

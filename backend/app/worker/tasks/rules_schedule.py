@@ -13,6 +13,7 @@ execute_rules_batch call together, same as the event-driven path in
 RuleService.evaluate_rules_for_event, so priority-based conflict
 resolution (ТЗ 3.5.4) applies here too.
 """
+
 import uuid
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
@@ -90,9 +91,17 @@ def evaluate_scheduled_rules(self: object) -> dict:
                     firing_by_entity[rule["entity_id"]].append(rule)
 
             for entity_id, entity_rules in firing_by_entity.items():
-                records = (await session.execute(
-                    select(Record).where(Record.entity_id == entity_id, Record.is_deleted.is_(False))
-                )).scalars().all()
+                records = (
+                    (
+                        await session.execute(
+                            select(Record).where(
+                                Record.entity_id == entity_id, Record.is_deleted.is_(False)
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
                 if not records:
                     continue
 

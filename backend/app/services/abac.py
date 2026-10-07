@@ -17,6 +17,7 @@ is built from today (e.g. `{"field": "department_id", "op": "eq",
 department key). Arbitrary literal-value conditions on any payload field
 are also supported, e.g. `{"field": "status", "op": "in", "value": [...]}`.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -73,14 +74,14 @@ def validate_condition(cond: Any) -> None:
     def _check_token(v: Any) -> None:
         if not isinstance(v, str) or not (v == "$self" or v.startswith("$self.")):
             return
-        attr = "id" if v == "$self" else v[len("$self."):]
+        attr = "id" if v == "$self" else v[len("$self.") :]
         if attr not in SELF_ATTRS:
             raise AbacConditionError(
                 f"Unsupported $self attribute {v!r}; must be one of "
                 f"{sorted('$self.' + a for a in SELF_ATTRS)}"
             )
 
-    for v in (value if isinstance(value, list) else [value]):
+    for v in value if isinstance(value, list) else [value]:
         _check_token(v)
 
 
@@ -92,15 +93,17 @@ def referenced_self_attrs(cond: Any) -> set[str]:
     tokens = value if isinstance(value, list) else [value]
     attrs = set()
     for v in tokens:
-        if isinstance(v, str) and v.startswith("$self.") and v[len("$self."):] in _LOOKUP_ATTRS:
-            attrs.add(v[len("$self."):])
+        if isinstance(v, str) and v.startswith("$self.") and v[len("$self.") :] in _LOOKUP_ATTRS:
+            attrs.add(v[len("$self.") :])
     return attrs
 
 
 def _resolve_self_token(token: Any, self_ctx: dict[str, str | None]) -> Any:
-    if not isinstance(token, str) or not (token == "$self" or token.startswith("$self.")):
+    if not isinstance(token, str) or not (
+        token == "$self" or token.startswith("$self.")  # noqa: S105
+    ):
         return token
-    attr = "id" if token == "$self" else token[len("$self."):]
+    attr = "id" if token == "$self" else token[len("$self.") :]  # noqa: S105
     if attr not in SELF_ATTRS:
         return None
     return self_ctx.get(attr)
@@ -212,7 +215,9 @@ async def apply_row_scope(
     result = await db.execute(
         select(abac_rule_model).where(
             abac_rule_model.resource_type == "entity",
-            or_(abac_rule_model.resource_id.is_(None), abac_rule_model.resource_id == str(entity_id)),
+            or_(
+                abac_rule_model.resource_id.is_(None), abac_rule_model.resource_id == str(entity_id)
+            ),
             abac_rule_model.role_id.in_(actor_roles),
         )
     )
@@ -229,15 +234,13 @@ async def apply_row_scope(
             needed_attrs |= referenced_self_attrs(cond)
     if needed_attrs and actor_id is not None:
         columns = [getattr(user_model, attr) for attr in sorted(needed_attrs)]
-        row = (
-            await db.execute(select(*columns).where(user_model.id == actor_id))
-        ).one_or_none()
+        row = (await db.execute(select(*columns).where(user_model.id == actor_id))).one_or_none()
         if row is not None:
-            for attr, value in zip(sorted(needed_attrs), row):
+            for attr, value in zip(sorted(needed_attrs), row, strict=False):
                 self_ctx[attr] = str(value) if value is not None else None
 
-    allow_clauses = []
-    deny_clauses = []
+    allow_clauses: list[Any] = []
+    deny_clauses: list[Any] = []
     for rule in rules:
         clause = _rule_clause(rule, self_ctx, record_model=record_model)
         if clause is None:

@@ -13,9 +13,7 @@ class Organisation(Base):
     __tablename__ = "organisation"
     __table_args__ = {"schema": "identity"}
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     slug: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     display_name: Mapped[str] = mapped_column(String(256), nullable=False)
     plan: Mapped[str] = mapped_column(String(64), nullable=False, default="trial")
@@ -53,9 +51,7 @@ class User(Base):
     __tablename__ = "user"
     __table_args__ = {"schema": "identity"}
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
     display_name: Mapped[str] = mapped_column(String(256), nullable=False)
     password_hash: Mapped[str | None] = mapped_column(String(256), nullable=True)
@@ -71,8 +67,12 @@ class User(Base):
     totp_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
     totp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    password_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    password_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    password_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Set for invited users (temp password); cleared on change/reset
     must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -137,9 +137,7 @@ class RefreshToken(Base):
     __tablename__ = "refresh_token"
     __table_args__ = {"schema": "identity"}
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("identity.user.id", ondelete="CASCADE"),
@@ -150,7 +148,9 @@ class RefreshToken(Base):
     revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
-    last_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_activity_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -162,9 +162,7 @@ class PasswordResetToken(Base):
     __tablename__ = "password_reset_token"
     __table_args__ = {"schema": "identity"}
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("identity.user.id", ondelete="CASCADE"),
@@ -187,7 +185,9 @@ class Group(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(256), nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
     members: Mapped[list["User"]] = relationship(
         "User",
@@ -213,7 +213,9 @@ class UserGroup(Base):
     group_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("identity.group.id", ondelete="CASCADE"), primary_key=True
     )
-    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class GroupRole(Base):
@@ -278,6 +280,7 @@ class FilePolicy(Base):
     """Platform-wide upload limits (ТЗ 3.7.1 / Приложение A). Per-block limits
     (e.g. max files on one multi-file block) may only tighten these, never
     loosen them — enforced in FileService."""
+
     __tablename__ = "file_policy"
     __table_args__ = {"schema": "identity"}
 
@@ -285,11 +288,25 @@ class FilePolicy(Base):
     max_file_size_mb: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
     max_files_per_record: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
     allowed_extensions: Mapped[list[str]] = mapped_column(
-        JSONB, nullable=False,
+        JSONB,
+        nullable=False,
         default=lambda: [
-            "pdf", "docx", "xlsx", "pptx", "odt", "txt", "rtf",
-            "jpg", "jpeg", "png", "gif", "webp", "svg",
-            "zip", "rar", "7z",
+            "pdf",
+            "docx",
+            "xlsx",
+            "pptx",
+            "odt",
+            "txt",
+            "rtf",
+            "jpg",
+            "jpeg",
+            "png",
+            "gif",
+            "webp",
+            "svg",
+            "zip",
+            "rar",
+            "7z",
         ],
     )
     updated_at: Mapped[datetime] = mapped_column(
@@ -299,6 +316,7 @@ class FilePolicy(Base):
 
 class ResourcePermission(Base):
     """Role → resource access matrix (app / page / block / field / record level)."""
+
     __tablename__ = "resource_permission"
     __table_args__ = {"schema": "identity"}
 
@@ -321,6 +339,7 @@ class ResourcePermission(Base):
 
 class AbacRule(Base):
     """Attribute-based access control rule for record-level visibility/editability."""
+
     __tablename__ = "abac_rule"
     __table_args__ = {"schema": "identity"}
 

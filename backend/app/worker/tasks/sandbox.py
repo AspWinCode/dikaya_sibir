@@ -8,6 +8,7 @@ priority-based conflict resolution (ТЗ 3.5.4) is actually deterministic —
 see app.engine.interpreter.run_rules_batch and app.services.rules.RuleService
 .evaluate_rules_for_event for why per-rule tasks couldn't guarantee that.
 """
+
 import time
 import uuid
 
@@ -23,7 +24,7 @@ logger = structlog.get_logger(__name__)
 @shared_task(
     name="app.worker.tasks.sandbox.execute_rules_batch",
     bind=True,
-    max_retries=0,          # Rules must not auto-retry — side effects may have occurred
+    max_retries=0,  # Rules must not auto-retry — side effects may have occurred
     time_limit=120,
     soft_time_limit=113,
     acks_late=True,
@@ -59,7 +60,7 @@ def execute_rules_batch(
     persist_error: str | None = None
     try:
         _persist_batch(batch, ctx, execution_batch_id)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         persist_error = str(exc)
         logger.exception(
             "rule_batch_persist_error", execution_batch_id=execution_batch_id, error=persist_error
@@ -117,18 +118,22 @@ def _persist_batch(batch: BatchResult, ctx: ExecutionContext, execution_batch_id
     and correctness here matters far more than connection-reuse overhead.
     """
     import asyncio
-    from app.core.config import settings
-    from app.models.data import Record
-    from app.models.logic import RuleConflictLog
+
     from sqlalchemy import select
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
+
+    from app.core.config import settings
+    from app.models.data import Record
+    from app.models.logic import RuleConflictLog
 
     db_url = str(settings.DATABASE_URL).replace("postgresql://", "postgresql+asyncpg://", 1)
 
     async def _run() -> None:
         run_engine = create_async_engine(db_url, poolclass=NullPool)
-        run_session_factory = async_sessionmaker(bind=run_engine, class_=AsyncSession, expire_on_commit=False, autoflush=False)
+        run_session_factory = async_sessionmaker(
+            bind=run_engine, class_=AsyncSession, expire_on_commit=False, autoflush=False
+        )
         async with run_session_factory() as session:
             if batch.applied_mutations and ctx.record_id:
                 stmt = select(Record).where(
@@ -169,12 +174,14 @@ def _persist_batch(batch: BatchResult, ctx: ExecutionContext, execution_batch_id
                         existing.updated_by = ctx.actor_id
                         existing.version += 1
                         continue
-                session.add(Record(
-                    entity_id=target_entity,
-                    payload=rec_create.get("payload", {}),
-                    created_by=ctx.actor_id,
-                    updated_by=ctx.actor_id,
-                ))
+                session.add(
+                    Record(
+                        entity_id=target_entity,
+                        payload=rec_create.get("payload", {}),
+                        created_by=ctx.actor_id,
+                        updated_by=ctx.actor_id,
+                    )
+                )
 
             for rec_update in batch.records_to_update:
                 try:
@@ -200,29 +207,33 @@ def _persist_batch(batch: BatchResult, ctx: ExecutionContext, execution_batch_id
                     record.is_deleted = True
 
             for conflict in batch.conflicts:
-                session.add(RuleConflictLog(
-                    app_id=ctx.app_id,
-                    entity_id=ctx.entity_id,
-                    record_id=ctx.record_id,
-                    event=ctx.event,
-                    field_name=conflict.field_name,
-                    winning_rule_id=uuid.UUID(conflict.winning_rule_id),
-                    winning_value=conflict.winning_value,
-                    losing_writes=conflict.losing_writes,
-                    execution_batch_id=uuid.UUID(execution_batch_id),
-                ))
+                session.add(
+                    RuleConflictLog(
+                        app_id=ctx.app_id,
+                        entity_id=ctx.entity_id,
+                        record_id=ctx.record_id,
+                        event=ctx.event,
+                        field_name=conflict.field_name,
+                        winning_rule_id=uuid.UUID(conflict.winning_rule_id),
+                        winning_value=conflict.winning_value,
+                        losing_writes=conflict.losing_writes,
+                        execution_batch_id=uuid.UUID(execution_batch_id),
+                    )
+                )
 
             for notif in batch.notifications:
                 if not notif.get("to"):
                     continue
                 from app.worker.tasks.notifications import send_email
+
                 template_str = notif.get("template", "")
                 record_ctx = notif.get("context", {})
                 try:
                     from jinja2 import BaseLoader, Environment, select_autoescape
+
                     env = Environment(loader=BaseLoader(), autoescape=select_autoescape(["html"]))
                     body_html = env.from_string(template_str).render(**record_ctx)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     body_html = template_str
                 send_email.apply_async(
                     kwargs={
@@ -238,6 +249,7 @@ def _persist_batch(batch: BatchResult, ctx: ExecutionContext, execution_batch_id
                 if not url:
                     continue
                 from app.worker.tasks.notifications import deliver_rule_webhook
+
                 deliver_rule_webhook.apply_async(
                     kwargs={
                         "app_id": str(ctx.app_id),
@@ -268,6 +280,7 @@ def _write_execution_logs(
     mirrors the old per-rule task's behavior of always leaving an audit
     trail even when persistence itself failed)."""
     import asyncio
+
     from app.core.database import AsyncSessionLocal
     from app.models.logic import RuleExecutionLog
 
@@ -287,21 +300,25 @@ def _write_execution_logs(
                         "webhooks": outcome.result.webhooks,
                         "errors": outcome.result.errors,
                     }
-                session.add(RuleExecutionLog(
-                    rule_id=uuid.UUID(outcome.rule_id),
-                    record_id=ctx.record_id,
-                    entity_id=ctx.entity_id,
-                    app_id=ctx.app_id,
-                    event=ctx.event,
-                    status=status,
-                    duration_ms=duration_ms,
-                    error=persist_error or ("; ".join(outcome.result.errors) or None),
-                    input_snapshot=ctx.record,
-                    output_snapshot=output,
-                ))
+                session.add(
+                    RuleExecutionLog(
+                        rule_id=uuid.UUID(outcome.rule_id),
+                        record_id=ctx.record_id,
+                        entity_id=ctx.entity_id,
+                        app_id=ctx.app_id,
+                        event=ctx.event,
+                        status=status,
+                        duration_ms=duration_ms,
+                        error=persist_error or ("; ".join(outcome.result.errors) or None),
+                        input_snapshot=ctx.record,
+                        output_snapshot=output,
+                    )
+                )
             await session.commit()
 
     try:
         asyncio.run(_run())
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("rule_batch_log_write_failed", execution_batch_id=execution_batch_id, error=str(exc))
+    except Exception as exc:
+        logger.warning(
+            "rule_batch_log_write_failed", execution_batch_id=execution_batch_id, error=str(exc)
+        )

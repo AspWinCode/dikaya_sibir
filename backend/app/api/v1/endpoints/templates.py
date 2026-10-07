@@ -1,4 +1,5 @@
 """Template install endpoint — scaffold entities + pages from a built-in template."""
+
 from __future__ import annotations
 
 import uuid
@@ -49,8 +50,9 @@ async def list_templates(
     return [TemplateMeta(**svc.get_template_meta(tid)) for tid in svc.list_template_ids()]
 
 
-@router.post("/{template_id}/install", response_model=InstallResult,
-             status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{template_id}/install", response_model=InstallResult, status_code=status.HTTP_201_CREATED
+)
 async def install_template(
     app_id: uuid.UUID,
     template_id: str,

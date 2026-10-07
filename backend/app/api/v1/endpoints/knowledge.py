@@ -45,7 +45,10 @@ async def list_articles(
 ) -> list[ArticleListItem]:
     include_unpublished = current_user.has_role("platform_admin")
     return await KnowledgeService(db).list_articles(
-        category=category, query=q, include_unpublished=include_unpublished, limit=limit,
+        category=category,
+        query=q,
+        include_unpublished=include_unpublished,
+        limit=limit,
     )
 
 
@@ -58,10 +61,13 @@ async def list_categories(current_user: AuthDep, db: DbDep) -> list[str]:
 async def get_article(id_or_slug: str, current_user: AuthDep, db: DbDep) -> ArticleRead:
     try:
         return await KnowledgeService(db).get_article(
-            id_or_slug, include_unpublished=current_user.has_role("platform_admin"),
+            id_or_slug,
+            include_unpublished=current_user.has_role("platform_admin"),
         )
     except ArticleNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Article not found"
+        ) from exc
 
 
 @router.post("/articles", response_model=ArticleRead, status_code=status.HTTP_201_CREATED)
@@ -70,16 +76,22 @@ async def create_article(body: ArticleCreate, current_user: AuthDep, db: DbDep) 
     try:
         return await KnowledgeService(db).create_article(body, actor_id=current_user.user_id)
     except ArticleSlugConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Slug {exc} already in use") from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=f"Slug {exc} already in use"
+        ) from exc
 
 
 @router.patch("/articles/{id_or_slug}", response_model=ArticleRead)
-async def update_article(id_or_slug: str, body: ArticleUpdate, current_user: AuthDep, db: DbDep) -> ArticleRead:
+async def update_article(
+    id_or_slug: str, body: ArticleUpdate, current_user: AuthDep, db: DbDep
+) -> ArticleRead:
     _require_admin(current_user)
     try:
         return await KnowledgeService(db).update_article(id_or_slug, body)
     except ArticleNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Article not found"
+        ) from exc
 
 
 @router.delete("/articles/{id_or_slug}", status_code=status.HTTP_204_NO_CONTENT)
@@ -88,7 +100,9 @@ async def delete_article(id_or_slug: str, current_user: AuthDep, db: DbDep) -> N
     try:
         await KnowledgeService(db).delete_article(id_or_slug)
     except ArticleNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Article not found"
+        ) from exc
 
 
 @router.post("/images", response_model=ImageUploadResponse, status_code=status.HTTP_201_CREATED)
@@ -104,8 +118,12 @@ async def upload_image(
     data = await file.read()
     try:
         return await KnowledgeService(db).upload_image(
-            data, file.content_type or "application/octet-stream",
-            get_storage(), get_antivirus(), actor_id=current_user.user_id, article_id=article_id,
+            data,
+            file.content_type or "application/octet-stream",
+            get_storage(),
+            get_antivirus(),
+            actor_id=current_user.user_id,
+            article_id=article_id,
         )
     except ImageError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
@@ -126,5 +144,7 @@ async def get_image_file(image_id: uuid.UUID, db: DbDep) -> RedirectResponse:
     try:
         url = await KnowledgeService(db).get_image_url(image_id, get_storage())
     except ImageNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Image not found"
+        ) from exc
     return RedirectResponse(url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)

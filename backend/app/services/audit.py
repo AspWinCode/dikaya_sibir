@@ -1,4 +1,5 @@
 """Audit log service — write and query immutable action log."""
+
 import uuid
 from datetime import datetime
 from typing import Any

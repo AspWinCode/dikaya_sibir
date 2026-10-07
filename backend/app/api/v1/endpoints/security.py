@@ -4,6 +4,7 @@ Field-level ABAC endpoints.
 Admin API for managing which roles can read/write which fields.
 Enforcement happens in records.py via ABACService.get_restrictions().
 """
+
 import uuid
 
 import structlog
@@ -87,7 +88,5 @@ async def check_my_permissions(
     Useful for frontends that want to hide/disable restricted fields.
     """
     await _check_app(app_id, current_user, db)
-    restrictions = await ABACService(db).get_restrictions(
-        entity_id, current_user.roles
-    )
+    restrictions = await ABACService(db).get_restrictions(entity_id, current_user.roles)
     return restrictions.to_response()

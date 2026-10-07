@@ -8,6 +8,7 @@ check_sla_breach      — wakes up at the SLA deadline and, if the instance is
 check_sla_escalation  — wakes up at sla_deadline + level.delay_seconds, reassigns
                         the instance to the level's assignee, and marks escalation_level.
 """
+
 import uuid
 from datetime import timedelta
 
@@ -43,10 +44,11 @@ def check_sla_breach(
     import asyncio
 
     async def _run() -> dict:
+        from sqlalchemy import select
+
         from app.core.database import AsyncSessionLocal
         from app.engine.interpreter import ExecutionContext, execute_actions
         from app.models.workflow import StateDef, WorkflowInstance
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as session:
             inst_result = await session.execute(
@@ -58,8 +60,12 @@ def check_sla_breach(
                 return {"status": "skipped", "reason": "instance_not_found"}
 
             if instance.current_state != expected_state:
-                logger.info("sla_state_changed", instance_id=instance_id,
-                            expected=expected_state, actual=instance.current_state)
+                logger.info(
+                    "sla_state_changed",
+                    instance_id=instance_id,
+                    expected=expected_state,
+                    actual=instance.current_state,
+                )
                 return {"status": "skipped", "reason": "state_already_changed"}
 
             state_result = await session.execute(
@@ -90,6 +96,7 @@ def check_sla_breach(
                 for notif in result.notifications:
                     if notif.get("to"):
                         from app.worker.tasks.notifications import send_email
+
                         send_email.apply_async(
                             kwargs={
                                 "to": notif["to"],
@@ -101,16 +108,19 @@ def check_sla_breach(
 
                 sla_breaches.labels(workflow_id=workflow_id).inc()
                 await session.commit()
-                logger.info("sla_breach_executed", instance_id=instance_id,
-                            state=expected_state, errors=result.errors)
+                logger.info(
+                    "sla_breach_executed",
+                    instance_id=instance_id,
+                    state=expected_state,
+                    errors=result.errors,
+                )
 
             # Schedule escalation levels
             sla_deadline = instance.sla_deadline
-            for esc in (state.escalation_levels or []):
+            for esc in state.escalation_levels or []:
                 level_num = esc.get("level")
                 delay = esc.get("delay_seconds")
                 if level_num and delay is not None and sla_deadline is not None:
-                    from datetime import timezone
                     eta = sla_deadline + timedelta(seconds=int(delay))
                     check_sla_escalation.apply_async(
                         kwargs={
@@ -122,8 +132,12 @@ def check_sla_breach(
                         eta=eta,
                         queue="default",
                     )
-                    logger.info("sla_escalation_scheduled", instance_id=instance_id,
-                                level=level_num, delay_seconds=delay)
+                    logger.info(
+                        "sla_escalation_scheduled",
+                        instance_id=instance_id,
+                        level=level_num,
+                        delay_seconds=delay,
+                    )
 
             return {
                 "status": "executed",
@@ -157,9 +171,10 @@ def check_sla_escalation(
     import asyncio
 
     async def _run() -> dict:
+        from sqlalchemy import select, update
+
         from app.core.database import AsyncSessionLocal
         from app.models.workflow import StateDef, WorkflowInstance
-        from sqlalchemy import select, update
 
         async with AsyncSessionLocal() as session:
             inst_result = await session.execute(
@@ -174,7 +189,10 @@ def check_sla_escalation(
                 return {"status": "skipped", "reason": "state_changed"}
 
             # Don't re-escalate if already at this level or higher
-            if instance.escalation_level is not None and instance.escalation_level >= escalation_level:
+            if (
+                instance.escalation_level is not None
+                and instance.escalation_level >= escalation_level
+            ):
                 return {"status": "skipped", "reason": "already_escalated"}
 
             state_result = await session.execute(
@@ -212,14 +230,18 @@ def check_sla_escalation(
                 )
                 .values(
                     escalation_level=escalation_level,
-                    assigned_user_id=new_user_id if assignee_type == "user" else instance.assigned_user_id,
-                    assigned_group_id=new_group_id if assignee_type == "group" else instance.assigned_group_id,
+                    assigned_user_id=new_user_id
+                    if assignee_type == "user"
+                    else instance.assigned_user_id,
+                    assigned_group_id=new_group_id
+                    if assignee_type == "group"
+                    else instance.assigned_group_id,
                 )
             )
             await session.commit()
 
             # Notify
-            message = esc_cfg.get("message") or f"Эскалация уровня {escalation_level}"
+            esc_cfg.get("message") or f"Эскалация уровня {escalation_level}"
             logger.info(
                 "sla_escalation_executed",
                 instance_id=instance_id,

@@ -1,11 +1,11 @@
 """Test factories using factory_boy + SQLAlchemy async."""
+
 import uuid
 
 import factory
-from factory.alchemy import SQLAlchemyModelFactory
-
 from app.core.security import hash_password
-from app.models.identity import Role, User, UserRole
+from app.models.identity import Role, User
+from factory.alchemy import SQLAlchemyModelFactory
 
 
 class RoleFactory(SQLAlchemyModelFactory):

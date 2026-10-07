@@ -33,6 +33,7 @@ def _not_found(exc: Exception) -> HTTPException:
 # Subscriptions
 # ==================================================================
 
+
 @router.get("", response_model=list[WebhookSubscriptionRead])
 async def list_webhooks(
     app_id: uuid.UUID,
@@ -46,6 +47,7 @@ async def list_webhooks(
 
 class WebhookCreateResponse(WebhookSubscriptionRead):
     """Creation response includes the secret (shown only once)."""
+
     secret: str
 
 
@@ -133,6 +135,7 @@ async def rotate_secret(
 # ==================================================================
 # Delivery history
 # ==================================================================
+
 
 @router.get("/{sub_id}/deliveries", response_model=list[WebhookDeliveryRead])
 async def list_deliveries(

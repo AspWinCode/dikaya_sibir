@@ -2,9 +2,10 @@ import base64
 import secrets
 import uuid
 from datetime import UTC, datetime
+from typing import ClassVar
 
 import structlog
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -12,7 +13,14 @@ from app.core.password_policy import PasswordPolicyError
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
 from app.schemas.common import CursorPage
-from app.schemas.users import AuditLogRead, InviteUserRequest, UserCreate, UserListParams, UserRead, UserUpdate
+from app.schemas.users import (
+    AuditLogRead,
+    InviteUserRequest,
+    UserCreate,
+    UserListParams,
+    UserRead,
+    UserUpdate,
+)
 from app.services.audit import AuditService
 from app.services.password_policy import PasswordPolicyService
 
@@ -65,9 +73,7 @@ class UserService:
 
         if params.search:
             term = f"%{params.search}%"
-            stmt = stmt.where(
-                or_(User.email.ilike(term), User.display_name.ilike(term))
-            )
+            stmt = stmt.where(or_(User.email.ilike(term), User.display_name.ilike(term)))
 
         if params.cursor:
             cur_ts, cur_id = _decode_cursor(params.cursor)
@@ -287,6 +293,7 @@ class UserService:
         actor_org_id: uuid.UUID | None = None,
     ) -> None:
         from sqlalchemy import delete as sa_delete
+
         user = await self._fetch_user(user_id)
         if user.is_superuser:
             raise PermissionError("Cannot delete superuser")
@@ -315,6 +322,7 @@ class UserService:
         org_id: uuid.UUID | None = None,
     ) -> list[AuditLogRead]:
         from app.services.audit import AuditService
+
         logs = await AuditService(self._db).list_logs(
             limit=limit, offset=offset, level=level, action=action, org_id=org_id
         )
@@ -328,11 +336,7 @@ class UserService:
     # Internals
     # ------------------------------------------------------------------
     async def _fetch_user(self, user_id: uuid.UUID) -> User:
-        stmt = (
-            select(User)
-            .options(selectinload(User.roles))
-            .where(User.id == user_id)
-        )
+        stmt = select(User).options(selectinload(User.roles)).where(User.id == user_id)
         result = await self._db.execute(stmt)
         user = result.scalar_one_or_none()
         if user is None:
@@ -344,15 +348,13 @@ class UserService:
     ) -> None:
         # Validate role ids exist
         result = await self._db.execute(select(Role.id).where(Role.id.in_(role_ids)))
-        found = {r for r in result.scalars()}
+        found = set(result.scalars())
         invalid = set(role_ids) - found
         if invalid:
             raise ValueError(f"Unknown roles: {invalid}")
 
         # Delete old assignments
-        existing = await self._db.execute(
-            select(UserRole).where(UserRole.user_id == user_id)
-        )
+        existing = await self._db.execute(select(UserRole).where(UserRole.user_id == user_id))
         for ur in existing.scalars():
             await self._db.delete(ur)
 
@@ -360,11 +362,16 @@ class UserService:
         for rid in role_ids:
             self._db.add(UserRole(user_id=user_id, role_id=rid, granted_by=granted_by))
 
-    _ORG_ASSIGNABLE_ROLES = {
-        "org_admin", "app_builder", "app_admin", "auditor",
+    _ORG_ASSIGNABLE_ROLES: ClassVar[set[str]] = {
+        "org_admin",
+        "app_builder",
+        "app_admin",
+        "auditor",
     }
 
-    async def _check_org_assignable_roles(self, role_ids: list[str], actor_org_id: uuid.UUID) -> None:
+    async def _check_org_assignable_roles(
+        self, role_ids: list[str], actor_org_id: uuid.UUID
+    ) -> None:
         # System roles are always assignable; custom roles are assignable if
         # they belong to the org_admin's own org (custom roles are already
         # org-scoped, so this doesn't leak across orgs).
@@ -373,7 +380,7 @@ class UserService:
             result = await self._db.execute(
                 select(Role.id).where(Role.id.in_(non_system), Role.org_id == actor_org_id)
             )
-            non_system -= {r for r in result.scalars()}
+            non_system -= set(result.scalars())
         forbidden = non_system
         if forbidden:
             raise PermissionError(f"Roles not assignable by org_admin: {forbidden}")

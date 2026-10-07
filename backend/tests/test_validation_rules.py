@@ -2,25 +2,25 @@
 материалов по рецепту" feature: schema/AST validation and the pure
 tree-walking part of the lookup resolver (no DB — those cases never reach
 the branch that queries the database, so they're real, not mocked)."""
+
 import uuid
 
 import pytest
-from pydantic import ValidationError
-
 from app.engine.interpreter import ExecutionContext
 from app.engine.lookup import resolve_lookups
 from app.schemas.rules import RuleCreate, RuleTrigger, TriggerEvent
+from pydantic import ValidationError
 
 
 def _rule(conditions: dict, actions: list[dict]) -> dict:
-    return dict(
-        entity_id=uuid.uuid4(),
-        name="test",
-        rule_type="validation",
-        trigger=RuleTrigger(event=TriggerEvent.RECORD_CREATED),
-        conditions=conditions,
-        actions=actions,
-    )
+    return {
+        "entity_id": uuid.uuid4(),
+        "name": "test",
+        "rule_type": "validation",
+        "trigger": RuleTrigger(event=TriggerEvent.RECORD_CREATED),
+        "conditions": conditions,
+        "actions": actions,
+    }
 
 
 class TestBlockSaveActionValidation:
@@ -39,7 +39,9 @@ class TestBlockSaveActionValidation:
 class TestLookupExprValidation:
     def test_simple_lookup_in_compare_value_accepted(self) -> None:
         cond = {
-            "type": "compare", "field": "qty_completed", "op": "lte",
+            "type": "compare",
+            "field": "qty_completed",
+            "op": "lte",
             "value": {
                 "type": "lookup",
                 "entity_id": str(uuid.uuid4()),
@@ -51,28 +53,44 @@ class TestLookupExprValidation:
         RuleCreate(**_rule(cond, [{"type": "block_save", "message": "not enough stock"}]))
 
     def test_lookup_missing_entity_id_rejected(self) -> None:
-        cond = {"type": "compare", "field": "x", "op": "eq", "value": {"type": "lookup", "agg": "value", "field": "y"}}
+        cond = {
+            "type": "compare",
+            "field": "x",
+            "op": "eq",
+            "value": {"type": "lookup", "agg": "value", "field": "y"},
+        }
         with pytest.raises(ValidationError):
             RuleCreate(**_rule(cond, [{"type": "block_save"}]))
 
     def test_lookup_invalid_agg_rejected(self) -> None:
         cond = {
-            "type": "compare", "field": "x", "op": "eq",
-            "value": {"type": "lookup", "entity_id": str(uuid.uuid4()), "field": "y", "agg": "median"},
+            "type": "compare",
+            "field": "x",
+            "op": "eq",
+            "value": {
+                "type": "lookup",
+                "entity_id": str(uuid.uuid4()),
+                "field": "y",
+                "agg": "median",
+            },
         }
         with pytest.raises(ValidationError):
             RuleCreate(**_rule(cond, [{"type": "block_save"}]))
 
     def test_lookup_count_agg_does_not_require_field(self) -> None:
         cond = {
-            "type": "compare", "field": "x", "op": "gt",
+            "type": "compare",
+            "field": "x",
+            "op": "gt",
             "value": {"type": "lookup", "entity_id": str(uuid.uuid4()), "agg": "count"},
         }
         RuleCreate(**_rule(cond, [{"type": "block_save"}]))
 
     def test_lookup_non_count_agg_requires_field(self) -> None:
         cond = {
-            "type": "compare", "field": "x", "op": "gt",
+            "type": "compare",
+            "field": "x",
+            "op": "gt",
             "value": {"type": "lookup", "entity_id": str(uuid.uuid4()), "agg": "sum"},
         }
         with pytest.raises(ValidationError):
@@ -100,9 +118,14 @@ class TestLookupExprValidation:
 
     def test_unknown_expr_type_inside_lookup_filter_rejected(self) -> None:
         cond = {
-            "type": "compare", "field": "x", "op": "eq",
+            "type": "compare",
+            "field": "x",
+            "op": "eq",
             "value": {
-                "type": "lookup", "entity_id": str(uuid.uuid4()), "field": "y", "agg": "value",
+                "type": "lookup",
+                "entity_id": str(uuid.uuid4()),
+                "field": "y",
+                "agg": "value",
                 "filter": {"z": {"type": "bogus"}},
             },
         }
@@ -117,33 +140,44 @@ class TestResolveLookupsTreeWalk:
 
     @pytest.mark.asyncio
     async def test_literal_passthrough(self) -> None:
-        ctx = ExecutionContext(record={}, entity_id=uuid.uuid4(), app_id=uuid.uuid4(), event="record.created")
+        ctx = ExecutionContext(
+            record={}, entity_id=uuid.uuid4(), app_id=uuid.uuid4(), event="record.created"
+        )
         node = {"type": "literal", "value": 42}
         result = await resolve_lookups(node, db=None, ctx=ctx)  # type: ignore[arg-type]
         assert result == node
 
     @pytest.mark.asyncio
     async def test_field_ref_passthrough(self) -> None:
-        ctx = ExecutionContext(record={}, entity_id=uuid.uuid4(), app_id=uuid.uuid4(), event="record.created")
+        ctx = ExecutionContext(
+            record={}, entity_id=uuid.uuid4(), app_id=uuid.uuid4(), event="record.created"
+        )
         node = {"type": "field_ref", "field": "qty"}
         result = await resolve_lookups(node, db=None, ctx=ctx)  # type: ignore[arg-type]
         assert result == node
 
     @pytest.mark.asyncio
     async def test_raw_python_value_passthrough(self) -> None:
-        ctx = ExecutionContext(record={}, entity_id=uuid.uuid4(), app_id=uuid.uuid4(), event="record.created")
+        ctx = ExecutionContext(
+            record={}, entity_id=uuid.uuid4(), app_id=uuid.uuid4(), event="record.created"
+        )
         assert await resolve_lookups(5, db=None, ctx=ctx) == 5  # type: ignore[arg-type]
         assert await resolve_lookups("x", db=None, ctx=ctx) == "x"  # type: ignore[arg-type]
         assert await resolve_lookups(None, db=None, ctx=ctx) is None  # type: ignore[arg-type]
 
     @pytest.mark.asyncio
     async def test_and_or_not_recurse_into_children(self) -> None:
-        ctx = ExecutionContext(record={}, entity_id=uuid.uuid4(), app_id=uuid.uuid4(), event="record.created")
+        ctx = ExecutionContext(
+            record={}, entity_id=uuid.uuid4(), app_id=uuid.uuid4(), event="record.created"
+        )
         node = {
             "type": "and",
             "children": [
                 {"type": "compare", "field": "a", "op": "eq", "value": 1},
-                {"type": "not", "children": [{"type": "compare", "field": "b", "op": "eq", "value": 2}]},
+                {
+                    "type": "not",
+                    "children": [{"type": "compare", "field": "b", "op": "eq", "value": 2}],
+                },
             ],
         }
         result = await resolve_lookups(node, db=None, ctx=ctx)  # type: ignore[arg-type]
@@ -151,9 +185,12 @@ class TestResolveLookupsTreeWalk:
 
     @pytest.mark.asyncio
     async def test_math_recurses_into_left_and_right(self) -> None:
-        ctx = ExecutionContext(record={}, entity_id=uuid.uuid4(), app_id=uuid.uuid4(), event="record.created")
+        ctx = ExecutionContext(
+            record={}, entity_id=uuid.uuid4(), app_id=uuid.uuid4(), event="record.created"
+        )
         node = {
-            "type": "math", "op": "multiply",
+            "type": "math",
+            "op": "multiply",
             "left": {"type": "field_ref", "field": "qty"},
             "right": {"type": "literal", "value": 3},
         }
@@ -162,8 +199,14 @@ class TestResolveLookupsTreeWalk:
 
     @pytest.mark.asyncio
     async def test_func_recurses_into_args(self) -> None:
-        ctx = ExecutionContext(record={}, entity_id=uuid.uuid4(), app_id=uuid.uuid4(), event="record.created")
-        node = {"type": "func", "name": "round", "args": [{"type": "field_ref", "field": "x"}, {"type": "literal", "value": 2}]}
+        ctx = ExecutionContext(
+            record={}, entity_id=uuid.uuid4(), app_id=uuid.uuid4(), event="record.created"
+        )
+        node = {
+            "type": "func",
+            "name": "round",
+            "args": [{"type": "field_ref", "field": "x"}, {"type": "literal", "value": 2}],
+        }
         result = await resolve_lookups(node, db=None, ctx=ctx)  # type: ignore[arg-type]
         assert result == node
 
@@ -171,7 +214,9 @@ class TestResolveLookupsTreeWalk:
     async def test_compare_without_dict_value_untouched(self) -> None:
         """A plain literal `value` (not an expression dict) is left as-is —
         only a dict `value` is recursed into."""
-        ctx = ExecutionContext(record={}, entity_id=uuid.uuid4(), app_id=uuid.uuid4(), event="record.created")
+        ctx = ExecutionContext(
+            record={}, entity_id=uuid.uuid4(), app_id=uuid.uuid4(), event="record.created"
+        )
         node = {"type": "compare", "field": "x", "op": "eq", "value": 5}
         result = await resolve_lookups(node, db=None, ctx=ctx)  # type: ignore[arg-type]
         assert result == node

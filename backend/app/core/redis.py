@@ -15,5 +15,6 @@ async def get_redis() -> Redis:
 async def close_redis() -> None:
     global _redis
     if _redis is not None:
-        await _redis.aclose()
+        # redis-py 5.x has aclose() at runtime; its stub lags behind.
+        await _redis.aclose()  # type: ignore[attr-defined]
         _redis = None

@@ -1,4 +1,5 @@
 """RoleService — custom role CRUD + resource permission management."""
+
 from __future__ import annotations
 
 import uuid
@@ -52,9 +53,7 @@ class RoleService:
     async def list_roles(self, actor_org_id: uuid.UUID | None = None) -> list[RoleRead]:
         stmt = select(Role).order_by(Role.is_system.desc(), Role.display_name)
         if actor_org_id is not None:
-            stmt = stmt.where(
-                (Role.is_system.is_(True)) | (Role.org_id == actor_org_id)
-            )
+            stmt = stmt.where((Role.is_system.is_(True)) | (Role.org_id == actor_org_id))
         result = await self._db.execute(stmt)
         return [RoleRead.model_validate(r) for r in result.scalars()]
 
@@ -266,9 +265,7 @@ class RoleService:
         updated_by: uuid.UUID | None = None,
         actor_email: str | None = None,
     ) -> AbacRuleRead:
-        result = await self._db.execute(
-            select(AbacRule).where(AbacRule.id == rule_id)
-        )
+        result = await self._db.execute(select(AbacRule).where(AbacRule.id == rule_id))
         rule = result.scalar_one_or_none()
         if rule is None:
             raise RoleNotFoundError(f"ABAC rule {rule_id} not found")
@@ -315,9 +312,7 @@ class RoleService:
         deleted_by: uuid.UUID | None = None,
         actor_email: str | None = None,
     ) -> None:
-        result = await self._db.execute(
-            select(AbacRule).where(AbacRule.id == rule_id)
-        )
+        result = await self._db.execute(select(AbacRule).where(AbacRule.id == rule_id))
         rule = result.scalar_one_or_none()
         if rule is None:
             return  # idempotent

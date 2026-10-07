@@ -1,17 +1,14 @@
 """Tests for POST /workflow/{id}/instances/{id}/cancel."""
+
 from __future__ import annotations
 
 import uuid
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import hash_password
 from app.models.identity import Role, User, UserRole
-from app.models.workflow import StateDef, TransitionDef, WorkflowDef, WorkflowInstance
-from app.services.workflow import WorkflowService
-
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ------------------------------------------------------------------
 # Fixtures
@@ -68,7 +65,8 @@ async def _create_app_and_workflow(
     """Return (app_id, workflow_id, instance_id)."""
     slug = f"wf-cancel-{uuid.uuid4().hex[:6]}"
     app_r = await client.post(
-        "/api/v1/apps", json={"slug": slug, "name": "Cancel Test App"},
+        "/api/v1/apps",
+        json={"slug": slug, "name": "Cancel Test App"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert app_r.status_code == 201, app_r.text
@@ -172,9 +170,7 @@ async def test_cancel_forbidden_for_regular_user(
 
 
 @pytest.mark.anyio
-async def test_cancel_instance_success(
-    client: AsyncClient, admin: User
-) -> None:
+async def test_cancel_instance_success(client: AsyncClient, admin: User) -> None:
     token = await _login(client, "cancel_admin@example.com", "Admin1234!")
     app_id, workflow_id, instance_id = await _create_app_and_workflow(client, token, None)
 
@@ -190,9 +186,7 @@ async def test_cancel_instance_success(
 
 
 @pytest.mark.anyio
-async def test_cancel_already_cancelled_returns_422(
-    client: AsyncClient, admin: User
-) -> None:
+async def test_cancel_already_cancelled_returns_422(client: AsyncClient, admin: User) -> None:
     token = await _login(client, "cancel_admin@example.com", "Admin1234!")
     app_id, workflow_id, instance_id = await _create_app_and_workflow(client, token, None)
 
@@ -214,9 +208,7 @@ async def test_cancel_already_cancelled_returns_422(
 
 
 @pytest.mark.anyio
-async def test_cancel_nonexistent_instance_returns_404(
-    client: AsyncClient, admin: User
-) -> None:
+async def test_cancel_nonexistent_instance_returns_404(client: AsyncClient, admin: User) -> None:
     token = await _login(client, "cancel_admin@example.com", "Admin1234!")
     app_id, workflow_id, _ = await _create_app_and_workflow(client, token, None)
 

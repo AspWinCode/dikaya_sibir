@@ -17,16 +17,17 @@ reads/writes app.models.data.Record directly (app/worker/tasks/sandbox.py's
 rule-mutation persistence, app/services/imports.py) bypasses this and is a
 known, separate gap — see ТЗ audit notes.
 """
+
 import base64
 import json
 import os
-from typing import Any
+from typing import Any, cast
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from app.core.config import settings
 
-_TOKEN_PREFIX = "enc:v1:"
+_TOKEN_PREFIX = "enc:v1:"  # noqa: S105 — a format-version marker string, not a secret
 
 
 class FieldCryptoError(Exception):
@@ -36,7 +37,7 @@ class FieldCryptoError(Exception):
 def _key() -> bytes:
     try:
         key = base64.b64decode(settings.FIELD_ENCRYPTION_KEY, validate=True)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise FieldCryptoError("FIELD_ENCRYPTION_KEY is not valid base64") from exc
     if len(key) != 32:
         raise FieldCryptoError(
@@ -54,9 +55,11 @@ def encrypt_value(value: Any) -> str:
     A fresh random nonce is generated per call (AES-GCM requires a unique
     nonce per encryption under the same key)."""
     if is_encrypted(value):
-        return value  # already encrypted — don't double-wrap
+        return cast(str, value)  # is_encrypted() already confirmed this is a str
     plaintext = json.dumps(value, ensure_ascii=False).encode("utf-8")
-    nonce = os.urandom(12)  # AES-GCM standard nonce size; must be unique per encryption under this key
+    nonce = os.urandom(
+        12
+    )  # AES-GCM standard nonce size; must be unique per encryption under this key
     ciphertext = AESGCM(_key()).encrypt(nonce, plaintext, None)
     return _TOKEN_PREFIX + base64.b64encode(nonce + ciphertext).decode("ascii")
 
@@ -67,16 +70,20 @@ def decrypt_value(token: str) -> Any:
     re-encrypting existing data)."""
     if not is_encrypted(token):
         return token
-    raw = base64.b64decode(token[len(_TOKEN_PREFIX):])
+    raw = base64.b64decode(token[len(_TOKEN_PREFIX) :])
     nonce, ciphertext = raw[:12], raw[12:]
     try:
         plaintext = AESGCM(_key()).decrypt(nonce, ciphertext, None)
-    except Exception as exc:  # noqa: BLE001
-        raise FieldCryptoError("Failed to decrypt field value (wrong key or corrupted data)") from exc
+    except Exception as exc:
+        raise FieldCryptoError(
+            "Failed to decrypt field value (wrong key or corrupted data)"
+        ) from exc
     return json.loads(plaintext.decode("utf-8"))
 
 
-def encrypt_sensitive_fields(payload: dict[str, Any], sensitive_field_names: set[str]) -> dict[str, Any]:
+def encrypt_sensitive_fields(
+    payload: dict[str, Any], sensitive_field_names: set[str]
+) -> dict[str, Any]:
     if not sensitive_field_names:
         return payload
     result = dict(payload)
@@ -86,7 +93,9 @@ def encrypt_sensitive_fields(payload: dict[str, Any], sensitive_field_names: set
     return result
 
 
-def decrypt_sensitive_fields(payload: dict[str, Any], sensitive_field_names: set[str]) -> dict[str, Any]:
+def decrypt_sensitive_fields(
+    payload: dict[str, Any], sensitive_field_names: set[str]
+) -> dict[str, Any]:
     if not sensitive_field_names:
         return payload
     result = dict(payload)
@@ -94,7 +103,7 @@ def decrypt_sensitive_fields(payload: dict[str, Any], sensitive_field_names: set
         v = result.get(name)
         if is_encrypted(v):
             try:
-                result[name] = decrypt_value(v)
+                result[name] = decrypt_value(cast(str, v))
             except FieldCryptoError:
                 result[name] = None  # undecryptable — fail closed, never leak ciphertext as-is
     return result

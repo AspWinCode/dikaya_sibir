@@ -13,23 +13,23 @@ Integration (HTTP, mirrors tests/test_security.py's app+entity setup):
   - a role explicitly granted can_read=True sees the real value
   - the audit log never contains the plaintext of a sensitive field
 """
+
 import uuid
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core import field_crypto
 from app.core.security import hash_password
 from app.models.audit import AuditLog
 from app.models.data import Record
 from app.models.identity import Role, User, UserRole
-
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ==================================================================
 # Unit
 # ==================================================================
+
 
 class TestFieldCrypto:
     def test_roundtrip(self) -> None:
@@ -86,11 +86,14 @@ class TestFieldCrypto:
 # Integration
 # ==================================================================
 
+
 @pytest.fixture()
 async def admin_user(db_session: AsyncSession) -> User:
     for role_id in ("platform_admin", "app_builder"):
         if not await db_session.get(Role, role_id):
-            db_session.add(Role(id=role_id, display_name=role_id.replace("_", " ").title(), is_system=True))
+            db_session.add(
+                Role(id=role_id, display_name=role_id.replace("_", " ").title(), is_system=True)
+            )
     user = User(
         email=f"enc_admin_{uuid.uuid4().hex[:6]}@example.com",
         display_name="Enc Admin",
@@ -134,12 +137,15 @@ async def _login(client: AsyncClient, email: str, pwd: str) -> str:
 
 
 async def _setup_app_entity_with_sensitive_field(
-    client: AsyncClient, token: str,
+    client: AsyncClient,
+    token: str,
 ) -> tuple[str, str, str]:
     """Returns (app_id, entity_id, field_name)."""
     slug = f"enc-app-{uuid.uuid4().hex[:6]}"
     headers = {"Authorization": f"Bearer {token}"}
-    app_r = await client.post("/api/v1/apps", json={"slug": slug, "name": "Enc App"}, headers=headers)
+    app_r = await client.post(
+        "/api/v1/apps", json={"slug": slug, "name": "Enc App"}, headers=headers
+    )
     assert app_r.status_code == 201, app_r.text
     app_id = app_r.json()["id"]
 
@@ -163,7 +169,9 @@ async def _setup_app_entity_with_sensitive_field(
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_sensitive_field_is_ciphertext_at_rest(
-    client: AsyncClient, admin_user: User, db_session: AsyncSession,
+    client: AsyncClient,
+    admin_user: User,
+    db_session: AsyncSession,
 ) -> None:
     token = await _login(client, admin_user.email, "Admin1234!")
     app_id, entity_id, field_name = await _setup_app_entity_with_sensitive_field(client, token)
@@ -178,9 +186,9 @@ async def test_sensitive_field_is_ciphertext_at_rest(
     record_id = create_r.json()["id"]
 
     # Look at the raw DB row directly — bypassing RecordService entirely.
-    raw = (await db_session.execute(
-        select(Record).where(Record.id == uuid.UUID(record_id))
-    )).scalar_one()
+    raw = (
+        await db_session.execute(select(Record).where(Record.id == uuid.UUID(record_id)))
+    ).scalar_one()
     assert field_crypto.is_encrypted(raw.payload[field_name])
     assert "7701234567" not in raw.payload[field_name]
 
@@ -203,7 +211,8 @@ async def test_platform_admin_sees_decrypted_value(client: AsyncClient, admin_us
 
     record_id = create_r.json()["id"]
     get_r = await client.get(
-        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{record_id}", headers=headers,
+        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{record_id}",
+        headers=headers,
     )
     assert get_r.status_code == 200
     assert get_r.json()["payload"][field_name] == "7701234567"
@@ -212,10 +221,15 @@ async def test_platform_admin_sees_decrypted_value(client: AsyncClient, admin_us
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_unprivileged_role_sees_masked_value(
-    client: AsyncClient, admin_user: User, viewer_user: User, viewer_role: Role,
+    client: AsyncClient,
+    admin_user: User,
+    viewer_user: User,
+    viewer_role: Role,
 ) -> None:
     admin_token = await _login(client, admin_user.email, "Admin1234!")
-    app_id, entity_id, field_name = await _setup_app_entity_with_sensitive_field(client, admin_token)
+    app_id, entity_id, field_name = await _setup_app_entity_with_sensitive_field(
+        client, admin_token
+    )
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
     create_r = await client.post(
@@ -240,7 +254,8 @@ async def test_unprivileged_role_sees_masked_value(
     viewer_token = await _login(client, viewer_user.email, "Viewer1234!")
     viewer_headers = {"Authorization": f"Bearer {viewer_token}"}
     get_r = await client.get(
-        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{record_id}", headers=viewer_headers,
+        f"/api/v1/apps/{app_id}/entities/{entity_id}/records/{record_id}",
+        headers=viewer_headers,
     )
     assert get_r.status_code == 200, get_r.text
     value = get_r.json()["payload"][field_name]
@@ -252,7 +267,9 @@ async def test_unprivileged_role_sees_masked_value(
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_audit_log_never_stores_sensitive_plaintext(
-    client: AsyncClient, admin_user: User, db_session: AsyncSession,
+    client: AsyncClient,
+    admin_user: User,
+    db_session: AsyncSession,
 ) -> None:
     token = await _login(client, admin_user.email, "Admin1234!")
     app_id, entity_id, field_name = await _setup_app_entity_with_sensitive_field(client, token)
@@ -265,9 +282,18 @@ async def test_audit_log_never_stores_sensitive_plaintext(
     )
     assert create_r.status_code == 201, create_r.text
 
-    logs = (await db_session.execute(
-        select(AuditLog).where(AuditLog.action == "record.created", AuditLog.resource_id == create_r.json()["id"])
-    )).scalars().all()
+    logs = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.action == "record.created",
+                    AuditLog.resource_id == create_r.json()["id"],
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
     assert logs, "expected an audit log entry for record.created"
     for log in logs:
         payload = log.details.get("payload", {})

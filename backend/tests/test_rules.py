@@ -4,13 +4,11 @@ Rules Engine tests.
 Unit tests: expressions, condition evaluation, action execution, graph/cycle detection.
 Integration tests: rule CRUD, activate/deactivate, cycle check, dry-run, execution log.
 """
+
 import uuid
 from typing import Any
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import hash_password
 from app.engine.expressions import ExpressionError, evaluate
 from app.engine.graph import (
@@ -18,7 +16,6 @@ from app.engine.graph import (
     build_dependency_graph,
     extract_rule_nodes,
     find_cycles,
-    tarjan_scc,
 )
 from app.engine.interpreter import (
     ExecutionContext,
@@ -29,7 +26,8 @@ from app.engine.interpreter import (
     run_rules_batch,
 )
 from app.models.identity import Role, User, UserRole
-
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ==================================================================
 # Helpers & fixtures
@@ -209,9 +207,13 @@ class TestFuncExpr:
         assert self._call("len", "hello") == 5
 
     def test_len_list(self) -> None:
-        assert evaluate(
-            {"type": "func", "name": "len", "args": [{"type": "literal", "value": [1, 2, 3]}]}, {}
-        ) == 3
+        assert (
+            evaluate(
+                {"type": "func", "name": "len", "args": [{"type": "literal", "value": [1, 2, 3]}]},
+                {},
+            )
+            == 3
+        )
 
     def test_coalesce_returns_first_non_none(self) -> None:
         assert self._call("coalesce", None, None, "found") == "found"
@@ -254,7 +256,12 @@ class TestExprDepthLimit:
         def nest(depth: int) -> dict:
             if depth == 0:
                 return {"type": "literal", "value": 1}
-            return {"type": "math", "op": "add", "left": nest(depth - 1), "right": {"type": "literal", "value": 0}}
+            return {
+                "type": "math",
+                "op": "add",
+                "left": nest(depth - 1),
+                "right": {"type": "literal", "value": 0},
+            }
 
         with pytest.raises(ExpressionError, match="depth"):
             evaluate(nest(20), {})
@@ -285,51 +292,75 @@ class TestConditionEvaluation:
 
     def test_compare_gt(self) -> None:
         ctx = _ctx({"amount": 150})
-        assert evaluate_conditions({"type": "compare", "field": "amount", "op": "gt", "value": 100}, ctx)
+        assert evaluate_conditions(
+            {"type": "compare", "field": "amount", "op": "gt", "value": 100}, ctx
+        )
 
     def test_compare_gte_equal(self) -> None:
         ctx = _ctx({"amount": 100})
-        assert evaluate_conditions({"type": "compare", "field": "amount", "op": "gte", "value": 100}, ctx)
+        assert evaluate_conditions(
+            {"type": "compare", "field": "amount", "op": "gte", "value": 100}, ctx
+        )
 
     def test_compare_lt(self) -> None:
         ctx = _ctx({"amount": 50})
-        assert evaluate_conditions({"type": "compare", "field": "amount", "op": "lt", "value": 100}, ctx)
+        assert evaluate_conditions(
+            {"type": "compare", "field": "amount", "op": "lt", "value": 100}, ctx
+        )
 
     def test_compare_lte(self) -> None:
         ctx = _ctx({"amount": 100})
-        assert evaluate_conditions({"type": "compare", "field": "amount", "op": "lte", "value": 100}, ctx)
+        assert evaluate_conditions(
+            {"type": "compare", "field": "amount", "op": "lte", "value": 100}, ctx
+        )
 
     def test_compare_contains(self) -> None:
         ctx = _ctx({"title": "Invoice #001"})
-        assert evaluate_conditions({"type": "compare", "field": "title", "op": "contains", "value": "Invoice"}, ctx)
+        assert evaluate_conditions(
+            {"type": "compare", "field": "title", "op": "contains", "value": "Invoice"}, ctx
+        )
 
     def test_compare_icontains_case_insensitive(self) -> None:
         ctx = _ctx({"title": "Invoice #001"})
-        assert evaluate_conditions({"type": "compare", "field": "title", "op": "icontains", "value": "invoice"}, ctx)
+        assert evaluate_conditions(
+            {"type": "compare", "field": "title", "op": "icontains", "value": "invoice"}, ctx
+        )
 
     def test_compare_starts_with(self) -> None:
         ctx = _ctx({"name": "John Doe"})
-        assert evaluate_conditions({"type": "compare", "field": "name", "op": "starts_with", "value": "John"}, ctx)
+        assert evaluate_conditions(
+            {"type": "compare", "field": "name", "op": "starts_with", "value": "John"}, ctx
+        )
 
     def test_compare_ends_with(self) -> None:
         ctx = _ctx({"name": "John Doe"})
-        assert evaluate_conditions({"type": "compare", "field": "name", "op": "ends_with", "value": "Doe"}, ctx)
+        assert evaluate_conditions(
+            {"type": "compare", "field": "name", "op": "ends_with", "value": "Doe"}, ctx
+        )
 
     def test_compare_in(self) -> None:
         ctx = _ctx({"status": "paid"})
-        assert evaluate_conditions({"type": "compare", "field": "status", "op": "in", "value": ["draft", "paid"]}, ctx)
+        assert evaluate_conditions(
+            {"type": "compare", "field": "status", "op": "in", "value": ["draft", "paid"]}, ctx
+        )
 
     def test_compare_nin(self) -> None:
         ctx = _ctx({"status": "draft"})
-        assert evaluate_conditions({"type": "compare", "field": "status", "op": "nin", "value": ["paid", "cancelled"]}, ctx)
+        assert evaluate_conditions(
+            {"type": "compare", "field": "status", "op": "nin", "value": ["paid", "cancelled"]}, ctx
+        )
 
     def test_compare_is_null(self) -> None:
         ctx = _ctx({"note": None})
-        assert evaluate_conditions({"type": "compare", "field": "note", "op": "is_null", "value": None}, ctx)
+        assert evaluate_conditions(
+            {"type": "compare", "field": "note", "op": "is_null", "value": None}, ctx
+        )
 
     def test_compare_is_not_null(self) -> None:
         ctx = _ctx({"note": "something"})
-        assert evaluate_conditions({"type": "compare", "field": "note", "op": "is_not_null", "value": None}, ctx)
+        assert evaluate_conditions(
+            {"type": "compare", "field": "note", "op": "is_not_null", "value": None}, ctx
+        )
 
     def test_and_all_true(self) -> None:
         ctx = _ctx({"a": 1, "b": 2})
@@ -410,7 +441,13 @@ class TestActionExecution:
     def test_set_field_literal(self) -> None:
         ctx = _ctx({"status": "draft"})
         result = execute_actions(
-            [{"type": "set_field", "field": "status", "value": {"type": "literal", "value": "active"}}],
+            [
+                {
+                    "type": "set_field",
+                    "field": "status",
+                    "value": {"type": "literal", "value": "active"},
+                }
+            ],
             ctx,
         )
         assert result.matched is True
@@ -420,11 +457,16 @@ class TestActionExecution:
         ctx = _ctx({"amount": 100})
         execute_actions(
             [
-                {"type": "set_field", "field": "doubled", "value": {
-                    "type": "math", "op": "multiply",
-                    "left": {"type": "field_ref", "field": "amount"},
-                    "right": {"type": "literal", "value": 2},
-                }},
+                {
+                    "type": "set_field",
+                    "field": "doubled",
+                    "value": {
+                        "type": "math",
+                        "op": "multiply",
+                        "left": {"type": "field_ref", "field": "amount"},
+                        "right": {"type": "literal", "value": 2},
+                    },
+                },
             ],
             ctx,
         )
@@ -442,7 +484,13 @@ class TestActionExecution:
         eid = str(uuid.uuid4())
         ctx = _ctx({"name": "Alice"})
         result = execute_actions(
-            [{"type": "create_record", "entity_id": eid, "payload": {"copied_from": {"type": "field_ref", "field": "name"}}}],
+            [
+                {
+                    "type": "create_record",
+                    "entity_id": eid,
+                    "payload": {"copied_from": {"type": "field_ref", "field": "name"}},
+                }
+            ],
             ctx,
         )
         assert len(result.records_to_create) == 1
@@ -453,7 +501,13 @@ class TestActionExecution:
         rec_id = str(uuid.uuid4())
         ctx = _ctx({"id": rec_id, "amount": 50})
         result = execute_actions(
-            [{"type": "update_record", "record_id_field": "id", "payload": {"amount": {"type": "literal", "value": 99}}}],
+            [
+                {
+                    "type": "update_record",
+                    "record_id_field": "id",
+                    "payload": {"amount": {"type": "literal", "value": 99}},
+                }
+            ],
             ctx,
         )
         assert len(result.records_to_update) == 1
@@ -480,7 +534,14 @@ class TestActionExecution:
     def test_send_notification_to_field(self) -> None:
         ctx = _ctx({"email": "alice@example.com"})
         result = execute_actions(
-            [{"type": "send_notification", "to_field": "email", "subject": "Hello", "template": "<p>Hi</p>"}],
+            [
+                {
+                    "type": "send_notification",
+                    "to_field": "email",
+                    "subject": "Hello",
+                    "template": "<p>Hi</p>",
+                }
+            ],
             ctx,
         )
         assert len(result.notifications) == 1
@@ -498,8 +559,14 @@ class TestActionExecution:
     def test_call_webhook(self) -> None:
         ctx = _ctx({"order_id": "123"})
         result = execute_actions(
-            [{"type": "call_webhook", "url": "https://hook.example.com", "method": "POST",
-              "payload": {"id": {"type": "field_ref", "field": "order_id"}}}],
+            [
+                {
+                    "type": "call_webhook",
+                    "url": "https://hook.example.com",
+                    "method": "POST",
+                    "payload": {"id": {"type": "field_ref", "field": "order_id"}},
+                }
+            ],
             ctx,
         )
         assert len(result.webhooks) == 1
@@ -511,7 +578,11 @@ class TestActionExecution:
         result = execute_actions(
             [
                 {"type": "stop"},
-                {"type": "set_field", "field": "should_not_set", "value": {"type": "literal", "value": True}},
+                {
+                    "type": "set_field",
+                    "field": "should_not_set",
+                    "value": {"type": "literal", "value": True},
+                },
             ],
             ctx,
         )
@@ -529,7 +600,10 @@ class TestActionExecution:
 
     def test_exceeds_max_actions(self) -> None:
         ctx = _ctx()
-        actions = [{"type": "set_field", "field": f"f{i}", "value": {"type": "literal", "value": i}} for i in range(21)]
+        actions = [
+            {"type": "set_field", "field": f"f{i}", "value": {"type": "literal", "value": i}}
+            for i in range(21)
+        ]
         with pytest.raises(RuleError, match="maximum"):
             execute_actions(actions, ctx)
 
@@ -540,7 +614,9 @@ class TestActionExecution:
 
 
 class TestRunRule:
-    def _trigger(self, event: str = "record.updated", watch_fields: list[str] | None = None) -> dict:
+    def _trigger(
+        self, event: str = "record.updated", watch_fields: list[str] | None = None
+    ) -> dict:
         return {"event": event, "watch_fields": watch_fields or []}
 
     def _cond_always_true(self) -> dict:
@@ -618,7 +694,11 @@ class TestRunRule:
 
 class TestRunRulesBatch:
     def _rule(
-        self, rule_id: str, priority: int, field: str, value: Any,
+        self,
+        rule_id: str,
+        priority: int,
+        field: str,
+        value: Any,
         condition: dict | None = None,
     ) -> dict:
         return {
@@ -682,7 +762,7 @@ class TestRunRulesBatch:
         itself, so a caller bug in sorting would surface here, not be masked."""
         ctx = _ctx({})
         rules = [
-            self._rule("first", 999, "status", "A"),   # listed first despite high priority number
+            self._rule("first", 999, "status", "A"),  # listed first despite high priority number
             self._rule("second", 1, "status", "B"),
         ]
         batch = run_rules_batch(rules, ctx)
@@ -713,7 +793,10 @@ class TestRunRulesBatch:
             self._rule("setter_high", 1, "status", "approved"),
             self._rule("setter_low", 50, "status", "rejected"),
             self._rule(
-                "watcher", 60, "notified", True,
+                "watcher",
+                60,
+                "notified",
+                True,
                 condition={"type": "compare", "field": "status", "op": "eq", "value": "approved"},
             ),
         ]
@@ -724,7 +807,10 @@ class TestRunRulesBatch:
         ctx = _ctx({"status": "draft"})
         rules = [
             self._rule(
-                "r1", 1, "x", 1,
+                "r1",
+                1,
+                "x",
+                1,
                 condition={"type": "compare", "field": "status", "op": "eq", "value": "active"},
             ),
         ]
@@ -747,13 +833,15 @@ class TestRunRulesBatch:
         ctx = _ctx({})
         rules = [
             {
-                "id": "r1", "priority": 1,
+                "id": "r1",
+                "priority": 1,
                 "trigger": {"event": "record.updated", "watch_fields": []},
                 "conditions": {},
                 "actions": [{"type": "create_record", "entity_id": "e1", "payload": {}}],
             },
             {
-                "id": "r2", "priority": 2,
+                "id": "r2",
+                "priority": 2,
                 "trigger": {"event": "record.updated", "watch_fields": []},
                 "conditions": {},
                 "actions": [{"type": "create_record", "entity_id": "e2", "payload": {}}],
@@ -769,8 +857,13 @@ class TestRunRulesBatch:
 
 
 class TestDependencyGraph:
-    def _node(self, rule_id: str, entity_id: str, trigger_event: str = "record.updated",
-               action_entity_ids: list[str] | None = None) -> RuleNode:
+    def _node(
+        self,
+        rule_id: str,
+        entity_id: str,
+        trigger_event: str = "record.updated",
+        action_entity_ids: list[str] | None = None,
+    ) -> RuleNode:
         return RuleNode(
             rule_id=rule_id,
             entity_id=entity_id,
@@ -900,7 +993,9 @@ async def test_create_rule(client: AsyncClient, builder: User) -> None:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_create_rule_persists_the_requested_rule_type(client: AsyncClient, builder: User) -> None:
+async def test_create_rule_persists_the_requested_rule_type(
+    client: AsyncClient, builder: User
+) -> None:
     """create_rule used to build the ORM Rule without passing rule_type at
     all, so every rule silently fell back to the column's "automation"
     default regardless of what was requested — a validation rule's
@@ -922,7 +1017,9 @@ async def test_create_rule_persists_the_requested_rule_type(client: AsyncClient,
         assert create.status_code == 201, create.text
         assert create.json()["rule_type"] == rule_type
 
-        fetched = await client.get(f"/api/v1/apps/{app_id}/rules/{create.json()['id']}", headers=headers)
+        fetched = await client.get(
+            f"/api/v1/apps/{app_id}/rules/{create.json()['id']}", headers=headers
+        )
         assert fetched.json()["rule_type"] == rule_type
 
 
@@ -933,7 +1030,9 @@ async def test_update_rule_can_change_rule_type(client: AsyncClient, builder: Us
     app_id, entity_id = await _setup_app(client, token)
     headers = {"Authorization": f"Bearer {token}"}
 
-    create = await client.post(f"/api/v1/apps/{app_id}/rules", json=_rule_body(entity_id), headers=headers)
+    create = await client.post(
+        f"/api/v1/apps/{app_id}/rules", json=_rule_body(entity_id), headers=headers
+    )
     rule_id = create.json()["id"]
     assert create.json()["rule_type"] == "automation"
 
@@ -1066,7 +1165,9 @@ async def test_activate_and_deactivate_rule(client: AsyncClient, builder: User) 
     assert activate.status_code == 200
     assert activate.json()["is_active"] is True
 
-    deactivate = await client.post(f"/api/v1/apps/{app_id}/rules/{rule_id}/deactivate", headers=headers)
+    deactivate = await client.post(
+        f"/api/v1/apps/{app_id}/rules/{rule_id}/deactivate", headers=headers
+    )
     assert deactivate.status_code == 200
     assert deactivate.json()["is_active"] is False
 
@@ -1142,9 +1243,7 @@ async def test_execution_log_endpoint(client: AsyncClient, builder: User) -> Non
     rule_id = create.json()["id"]
 
     # No logs yet — should return empty list
-    resp = await client.get(
-        f"/api/v1/apps/{app_id}/rules/{rule_id}/logs", headers=headers
-    )
+    resp = await client.get(f"/api/v1/apps/{app_id}/rules/{rule_id}/logs", headers=headers)
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
 
@@ -1310,15 +1409,19 @@ async def test_reorder_steps(client: AsyncClient, builder: User) -> None:
 
     await client.post(
         f"/api/v1/apps/{app_id}/rules/{rule_id}/steps",
-        json={"type": "stop", "config": {}}, headers=headers,
+        json={"type": "stop", "config": {}},
+        headers=headers,
     )
-    steps = (await client.get(f"/api/v1/apps/{app_id}/rules/{rule_id}/steps", headers=headers)).json()
+    steps = (
+        await client.get(f"/api/v1/apps/{app_id}/rules/{rule_id}/steps", headers=headers)
+    ).json()
     ids = [s["id"] for s in steps]
     reversed_ids = list(reversed(ids))
 
     resp = await client.put(
         f"/api/v1/apps/{app_id}/rules/{rule_id}/steps/reorder",
-        json={"step_ids": reversed_ids}, headers=headers,
+        json={"step_ids": reversed_ids},
+        headers=headers,
     )
     assert resp.status_code == 200, resp.text
     assert [s["id"] for s in resp.json()] == reversed_ids
@@ -1335,6 +1438,7 @@ async def test_update_missing_step_404(client: AsyncClient, builder: User) -> No
 
     resp = await client.patch(
         f"/api/v1/apps/{app_id}/rules/{rule_id}/steps/nonexistent",
-        json={"config": {}}, headers=headers,
+        json={"config": {}},
+        headers=headers,
     )
     assert resp.status_code == 404

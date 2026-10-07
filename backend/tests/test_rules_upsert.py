@@ -7,20 +7,20 @@ rather than just the pure interpreter, since the find-or-increment logic
 lives there (DB access is deliberately kept out of the interpreter — see
 its module docstring).
 """
+
 import asyncio
 import os
 import uuid
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.security import hash_password
 from app.engine.interpreter import BatchResult, ExecutionContext
 from app.models.data import Record
 from app.models.identity import Role, User, UserRole
 from app.worker.tasks.sandbox import _persist_batch
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 pytestmark = pytest.mark.integration
 
@@ -70,7 +70,11 @@ async def _login(client: AsyncClient, email: str, pwd: str) -> str:
 async def builder(db_session: AsyncSession) -> User:
     if not await db_session.get(Role, "app_builder"):
         db_session.add(Role(id="app_builder", display_name="Builder", is_system=True))
-    user = User(email="upsert_builder@example.com", display_name="Builder", password_hash=hash_password("Build1234!"))
+    user = User(
+        email="upsert_builder@example.com",
+        display_name="Builder",
+        password_hash=hash_password("Build1234!"),
+    )
     db_session.add(user)
     await db_session.flush()
     db_session.add(UserRole(user_id=user.id, role_id="app_builder"))
@@ -85,7 +89,8 @@ async def balance_entity_id(client: AsyncClient, builder: User) -> uuid.UUID:
     token = await _login(client, builder.email, "Build1234!")
     headers = {"Authorization": f"Bearer {token}"}
     app_resp = await client.post(
-        "/api/v1/apps", json={"slug": f"upsert-app-{uuid.uuid4().hex[:6]}", "name": "Upsert Test App"},
+        "/api/v1/apps",
+        json={"slug": f"upsert-app-{uuid.uuid4().hex[:6]}", "name": "Upsert Test App"},
         headers=headers,
     )
     app_id = app_resp.json()["id"]
@@ -100,13 +105,18 @@ async def balance_entity_id(client: AsyncClient, builder: User) -> uuid.UUID:
         {"name": "location_id", "display_name": "Помещение", "field_type": "text"},
         {"name": "quantity", "display_name": "Количество", "field_type": "decimal"},
     ]:
-        await client.post(f"/api/v1/apps/{app_id}/entities/{entity_id}/fields", json=f, headers=headers)
+        await client.post(
+            f"/api/v1/apps/{app_id}/entities/{entity_id}/fields", json=f, headers=headers
+        )
     return uuid.UUID(entity_id)
 
 
 def _ctx(balance_entity_id: uuid.UUID) -> ExecutionContext:
     return ExecutionContext(
-        record={}, entity_id=balance_entity_id, app_id=uuid.uuid4(), event="record.created",
+        record={},
+        entity_id=balance_entity_id,
+        app_id=uuid.uuid4(),
+        event="record.created",
     )
 
 
@@ -114,17 +124,23 @@ def _ctx(balance_entity_id: uuid.UUID) -> ExecutionContext:
 async def test_upsert_creates_a_new_balance_row_when_none_matches(
     db_session: AsyncSession, balance_entity_id: uuid.UUID
 ) -> None:
-    batch = BatchResult(records_to_create=[{
-        "entity_id": str(balance_entity_id),
-        "payload": {"product_id": "prod-1", "location_id": "loc-1", "quantity": 10},
-        "match": {"product_id": "prod-1", "location_id": "loc-1"},
-        "increment": {"quantity": 10},
-    }])
+    batch = BatchResult(
+        records_to_create=[
+            {
+                "entity_id": str(balance_entity_id),
+                "payload": {"product_id": "prod-1", "location_id": "loc-1", "quantity": 10},
+                "match": {"product_id": "prod-1", "location_id": "loc-1"},
+                "increment": {"quantity": 10},
+            }
+        ]
+    )
     await _persist(batch, _ctx(balance_entity_id), "batch-1")
 
-    rows = (await db_session.execute(
-        select(Record).where(Record.entity_id == balance_entity_id)
-    )).scalars().all()
+    rows = (
+        (await db_session.execute(select(Record).where(Record.entity_id == balance_entity_id)))
+        .scalars()
+        .all()
+    )
     assert len(rows) == 1
     assert rows[0].payload["quantity"] == 10
 
@@ -142,15 +158,31 @@ async def test_upsert_increments_the_existing_row_instead_of_duplicating(
 
     # First receipt: +5 at loc-A — no row exists yet, creates one.
     await _persist(
-        BatchResult(records_to_create=[{**action, "payload": {"product_id": "prod-2", "location_id": "loc-A", "quantity": 5}}]),
-        ctx, "batch-2a",
+        BatchResult(
+            records_to_create=[
+                {
+                    **action,
+                    "payload": {"product_id": "prod-2", "location_id": "loc-A", "quantity": 5},
+                }
+            ]
+        ),
+        ctx,
+        "batch-2a",
     )
     # Second receipt: +5 more at the same product/location.
     await _persist(BatchResult(records_to_create=[action]), ctx, "batch-2b")
 
-    rows = (await db_session.execute(
-        select(Record).where(Record.entity_id == balance_entity_id, Record.is_deleted.is_(False))
-    )).scalars().all()
+    rows = (
+        (
+            await db_session.execute(
+                select(Record).where(
+                    Record.entity_id == balance_entity_id, Record.is_deleted.is_(False)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
     assert len(rows) == 1  # not duplicated
     assert rows[0].payload["quantity"] == 10  # 5 + 5
     assert rows[0].version == 2  # incremented, not recreated
@@ -164,31 +196,65 @@ async def test_upsert_treats_different_locations_as_different_balance_rows(
     not collide into one row just because the product matches."""
     ctx = _ctx(balance_entity_id)
 
-    await _persist(BatchResult(records_to_create=[{
-        "entity_id": str(balance_entity_id),
-        "payload": {"product_id": "prod-3", "location_id": "warehouse-A", "quantity": 20},
-        "match": {"product_id": "prod-3", "location_id": "warehouse-A"},
-        "increment": {"quantity": 20},
-    }]), ctx, "batch-3a")
+    await _persist(
+        BatchResult(
+            records_to_create=[
+                {
+                    "entity_id": str(balance_entity_id),
+                    "payload": {
+                        "product_id": "prod-3",
+                        "location_id": "warehouse-A",
+                        "quantity": 20,
+                    },
+                    "match": {"product_id": "prod-3", "location_id": "warehouse-A"},
+                    "increment": {"quantity": 20},
+                }
+            ]
+        ),
+        ctx,
+        "batch-3a",
+    )
 
     # Transfer 8 units from A to B: decrement A, increment (create) B.
-    await _persist(BatchResult(records_to_create=[
-        {
-            "entity_id": str(balance_entity_id),
-            "payload": {"product_id": "prod-3", "location_id": "warehouse-A", "quantity": -8},
-            "match": {"product_id": "prod-3", "location_id": "warehouse-A"},
-            "increment": {"quantity": -8},
-        },
-        {
-            "entity_id": str(balance_entity_id),
-            "payload": {"product_id": "prod-3", "location_id": "warehouse-B", "quantity": 8},
-            "match": {"product_id": "prod-3", "location_id": "warehouse-B"},
-            "increment": {"quantity": 8},
-        },
-    ]), ctx, "batch-3b")
+    await _persist(
+        BatchResult(
+            records_to_create=[
+                {
+                    "entity_id": str(balance_entity_id),
+                    "payload": {
+                        "product_id": "prod-3",
+                        "location_id": "warehouse-A",
+                        "quantity": -8,
+                    },
+                    "match": {"product_id": "prod-3", "location_id": "warehouse-A"},
+                    "increment": {"quantity": -8},
+                },
+                {
+                    "entity_id": str(balance_entity_id),
+                    "payload": {
+                        "product_id": "prod-3",
+                        "location_id": "warehouse-B",
+                        "quantity": 8,
+                    },
+                    "match": {"product_id": "prod-3", "location_id": "warehouse-B"},
+                    "increment": {"quantity": 8},
+                },
+            ]
+        ),
+        ctx,
+        "batch-3b",
+    )
 
-    rows = (await db_session.execute(
-        select(Record).where(Record.entity_id == balance_entity_id, Record.is_deleted.is_(False))
-    )).scalars().all()
+    rows = (
+        (
+            await db_session.execute(
+                select(Record).where(
+                    Record.entity_id == balance_entity_id, Record.is_deleted.is_(False)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
     by_location = {r.payload["location_id"]: r.payload["quantity"] for r in rows}
     assert by_location == {"warehouse-A": 12, "warehouse-B": 8}

@@ -12,7 +12,8 @@ Usage:
     from app.core.metrics import rule_executions
     rule_executions.labels(status="success").inc()
 """
-from prometheus_client import Counter, Gauge, Histogram
+
+from prometheus_client import Counter, Gauge
 
 # ------------------------------------------------------------------
 # Rules Engine
@@ -21,7 +22,7 @@ from prometheus_client import Counter, Gauge, Histogram
 rule_executions = Counter(
     "nocode_rule_executions_total",
     "Total rule executions",
-    ["status"],   # success | failed | skipped | timeout
+    ["status"],  # success | failed | skipped | timeout
 )
 
 # ------------------------------------------------------------------
@@ -52,13 +53,13 @@ sla_breaches = Counter(
 record_operations = Counter(
     "nocode_record_operations_total",
     "Record CRUD operations",
-    ["operation"],   # create | read | update | delete | list
+    ["operation"],  # create | read | update | delete | list
 )
 
 file_uploads = Counter(
     "nocode_file_uploads_total",
     "File upload attempts",
-    ["status"],   # success | virus_detected | error
+    ["status"],  # success | virus_detected | error
 )
 
 # ------------------------------------------------------------------
@@ -68,7 +69,7 @@ file_uploads = Counter(
 webhook_deliveries = Counter(
     "nocode_webhook_deliveries_total",
     "Webhook delivery attempts",
-    ["status"],   # delivered | failed | exhausted
+    ["status"],  # delivered | failed | exhausted
 )
 
 outbox_events_processed = Counter(
@@ -83,11 +84,11 @@ outbox_events_processed = Counter(
 auth_attempts = Counter(
     "nocode_auth_attempts_total",
     "Authentication attempts",
-    ["result"],   # success | wrong_password | totp_required | totp_invalid | inactive
+    ["result"],  # success | wrong_password | totp_required | totp_invalid | inactive
 )
 
 token_refreshes = Counter(
     "nocode_token_refreshes_total",
     "JWT refresh operations",
-    ["result"],   # success | expired | revoked
+    ["result"],  # success | expired | revoked
 )

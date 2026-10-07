@@ -3,6 +3,7 @@
 Filter format: ?filter=field:op:value  (repeatable)
 Operators: eq ne gt gte lt lte contains icontains in nin is_null is_not_null
 """
+
 import uuid
 from datetime import datetime
 from enum import Enum
@@ -20,8 +21,8 @@ class FilterOp(str, Enum):
     LTE = "lte"
     CONTAINS = "contains"
     ICONTAINS = "icontains"
-    IN = "in"          # value is comma-separated list
-    NIN = "nin"        # not in
+    IN = "in"  # value is comma-separated list
+    NIN = "nin"  # not in
     IS_NULL = "is_null"
     IS_NOT_NULL = "is_not_null"
 
@@ -63,6 +64,7 @@ def parse_filters(raw_filters: list[str]) -> list[ParsedFilter]:
 
 # ---- Schemas ----
 
+
 class RecordRead(BaseModel):
     id: uuid.UUID
     entity_id: uuid.UUID
@@ -82,6 +84,7 @@ class TrashedRecordRead(BaseModel):
     """One row in the app-wide «Корзина» (ТЗ 3.9.1) — a soft-deleted record
     plus enough entity context to display and restore it without a second
     lookup."""
+
     id: uuid.UUID
     entity_id: uuid.UUID
     entity_slug: str
@@ -99,6 +102,7 @@ class RecordCreate(BaseModel):
 
 class RecordUpdate(BaseModel):
     """PATCH — only provided fields are updated in payload."""
+
     payload: dict[str, Any] = Field(min_length=1)
 
 

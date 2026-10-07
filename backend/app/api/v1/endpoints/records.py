@@ -1,5 +1,6 @@
 import json
 import uuid
+from collections.abc import Set as AbstractSet
 from typing import Any, Literal
 
 import structlog
@@ -24,9 +25,9 @@ from app.services.apps import AppNotFoundError, AppService
 from app.services.audit import AuditService
 from app.services.entities import EntityNotFoundError, EntityService
 from app.services.exports import ExportError, ExportService
-from app.services.files import FileError, FileNotFoundError, FileService
-from app.services.imports import ImportError as ImportFileError
+from app.services.files import FileError, FileService, RecordFileNotFoundError
 from app.services.imports import ImportService
+from app.services.imports import ImportValidationError as ImportFileError
 from app.services.records import RecordNotFoundError, RecordService, RecordValidationError
 from app.services.rules import RuleService
 from app.services.security import ABACService, FieldRestrictions
@@ -40,7 +41,9 @@ router = APIRouter(
 )
 
 
-async def _resolve_entity(app_id: uuid.UUID, entity_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> None:
+async def _resolve_entity(
+    app_id: uuid.UUID, entity_id: uuid.UUID, current_user: AuthDep, db: DbDep
+) -> None:
     """Verify app is accessible and entity belongs to it."""
     try:
         await AppService(db).get_app(app_id, actor_id=current_user.user_id)
@@ -50,11 +53,15 @@ async def _resolve_entity(app_id: uuid.UUID, entity_id: uuid.UUID, current_user:
     try:
         await EntityService(db).get_entity(app_id, entity_id)
     except EntityNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
+        ) from exc
 
 
 def _apply_abac(
-    record: RecordRead, denied_read: set[str], mask_fields: set[str] = frozenset()
+    record: RecordRead,
+    denied_read: AbstractSet[str],
+    mask_fields: AbstractSet[str] = frozenset(),
 ) -> RecordRead:
     """Return a copy of the record with denied fields stripped and
     sensitive-but-unauthorized fields masked (ТЗ 3.13)."""
@@ -87,6 +94,7 @@ async def _sensitive_mask_fields(
 # Records
 # ------------------------------------------------------------------
 
+
 @router.get("", response_model=CursorPage[RecordRead])
 async def list_records(
     app_id: uuid.UUID,
@@ -95,7 +103,8 @@ async def list_records(
     db: DbDep,
     cursor: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
-    filter: list[str] = Query(default=[]),  # ?filter=name:eq:John&filter=age:gte:18
+    # ?filter=name:eq:John&filter=age:gte:18
+    filters: list[str] = Query(default=[], alias="filter"),
     sort: str | None = Query(default=None),
     sort_dir: str = Query(default="asc", pattern=r"^(asc|desc)$"),
     include_deleted: bool = Query(default=False),
@@ -103,9 +112,11 @@ async def list_records(
     await _resolve_entity(app_id, entity_id, current_user, db)
 
     try:
-        parsed_filters = parse_filters(filter)
+        parsed_filters = parse_filters(filters)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
     params = RecordListParams(
         cursor=cursor,
@@ -117,17 +128,24 @@ async def list_records(
     )
     try:
         page = await RecordService(db).list_records(
-            entity_id, params, actor_id=current_user.user_id, actor_roles=current_user.roles,
+            entity_id,
+            params,
+            actor_id=current_user.user_id,
+            actor_roles=current_user.roles,
         )
     except RecordValidationError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
     restrictions = await ABACService(db).get_restrictions(entity_id, current_user.roles)
     mask_fields = await _sensitive_mask_fields(db, entity_id, current_user, restrictions)
     if restrictions.denied_read or mask_fields:
-        page = page.model_copy(update={
-            "items": [_apply_abac(r, restrictions.denied_read, mask_fields) for r in page.items]
-        })
+        page = page.model_copy(
+            update={
+                "items": [_apply_abac(r, restrictions.denied_read, mask_fields) for r in page.items]
+            }
+        )
     return page
 
 
@@ -154,24 +172,36 @@ async def create_record(
             entity_id, body, app_id, actor_id=current_user.user_id
         )
     except RecordValidationError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     except ValidationBlockedError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message
+        ) from exc
 
     try:
         await RuleService(db).evaluate_rules_for_event(
-            app_id, entity_id, record.id, record.payload, "record.created",
+            app_id,
+            entity_id,
+            record.id,
+            record.payload,
+            "record.created",
             actor_id=current_user.user_id,
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("rule_evaluation_failed", entity_id=str(entity_id))
 
     # The audit log itself is not encrypted — mask sensitive fields here too,
     # or marking a field "sensitive" would be undone by its own audit trail.
     sensitive_names = await RecordService(db).get_sensitive_field_names(entity_id)
     audit_payload = (
-        {k: (field_crypto.mask_value(v) if k in sensitive_names else v) for k, v in record.payload.items()}
-        if sensitive_names else record.payload
+        {
+            k: (field_crypto.mask_value(v) if k in sensitive_names else v)
+            for k, v in record.payload.items()
+        }
+        if sensitive_names
+        else record.payload
     )
     await AuditService(db).log(
         "record.created",
@@ -197,8 +227,8 @@ async def export_records(
     entity_id: uuid.UUID,
     current_user: AuthDep,
     db: DbDep,
-    format: str = Query(default="xlsx", pattern=r"^(xlsx|csv|pdf)$"),
-    filter: list[str] = Query(default=[]),
+    export_format: str = Query(default="xlsx", pattern=r"^(xlsx|csv|pdf)$", alias="format"),
+    filters: list[str] = Query(default=[], alias="filter"),
     sort: str | None = Query(default=None),
     sort_dir: str = Query(default="asc", pattern=r"^(asc|desc)$"),
     limit: int = Query(default=5000, ge=1, le=10000, description="Max rows to export"),
@@ -207,9 +237,11 @@ async def export_records(
     await _resolve_entity(app_id, entity_id, current_user, db)
 
     try:
-        parsed_filters = parse_filters(filter)
+        parsed_filters = parse_filters(filters)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
     params = RecordListParams(
         limit=limit,
@@ -220,14 +252,17 @@ async def export_records(
 
     try:
         file_bytes = await ExportService(db).export(
-            entity_id, params, format=format,
-            actor_id=current_user.user_id, actor_roles=current_user.roles,
+            entity_id,
+            params,
+            export_format=export_format,
+            actor_id=current_user.user_id,
+            actor_roles=current_user.roles,
         )
     except ExportError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
-    content_type = _EXPORT_CONTENT_TYPES[format]
-    filename = f"export_{entity_id}.{format}"
+    content_type = _EXPORT_CONTENT_TYPES[export_format]
+    filename = f"export_{entity_id}.{export_format}"
     return Response(
         content=file_bytes,
         media_type=content_type,
@@ -251,10 +286,15 @@ async def get_record(
     await _resolve_entity(app_id, entity_id, current_user, db)
     try:
         record = await RecordService(db).get_record(
-            entity_id, record_id, actor_id=current_user.user_id, actor_roles=current_user.roles,
+            entity_id,
+            record_id,
+            actor_id=current_user.user_id,
+            actor_roles=current_user.roles,
         )
     except RecordNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Record not found"
+        ) from exc
 
     restrictions = await ABACService(db).get_restrictions(entity_id, current_user.roles)
     mask_fields = await _sensitive_mask_fields(db, entity_id, current_user, restrictions)
@@ -286,25 +326,43 @@ async def update_record(
         # Pre-update snapshot, just for the audit diff below — RecordService.update_record
         # re-checks ABAC/existence itself right after, so this doesn't weaken enforcement.
         previous = await RecordService(db).get_record(
-            entity_id, record_id, actor_id=current_user.user_id, actor_roles=current_user.roles,
+            entity_id,
+            record_id,
+            actor_id=current_user.user_id,
+            actor_roles=current_user.roles,
         )
         record = await RecordService(db).update_record(
-            entity_id, record_id, body, app_id,
-            actor_id=current_user.user_id, actor_roles=current_user.roles,
+            entity_id,
+            record_id,
+            body,
+            app_id,
+            actor_id=current_user.user_id,
+            actor_roles=current_user.roles,
         )
     except RecordNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Record not found"
+        ) from exc
     except RecordValidationError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     except ValidationBlockedError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message
+        ) from exc
 
     try:
         await RuleService(db).evaluate_rules_for_event(
-            app_id, entity_id, record.id, record.payload, "record.updated",
-            changed_fields=changed_fields, actor_id=current_user.user_id,
+            app_id,
+            entity_id,
+            record.id,
+            record.payload,
+            "record.updated",
+            changed_fields=changed_fields,
+            actor_id=current_user.user_id,
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("rule_evaluation_failed", entity_id=str(entity_id))
 
     sensitive_names = await RecordService(db).get_sensitive_field_names(entity_id)
@@ -313,7 +371,10 @@ async def update_record(
         return field_crypto.mask_value(v) if f in sensitive_names else v
 
     field_changes = {
-        f: {"old": _audit_value(f, previous.payload.get(f)), "new": _audit_value(f, record.payload.get(f))}
+        f: {
+            "old": _audit_value(f, previous.payload.get(f)),
+            "new": _audit_value(f, record.payload.get(f)),
+        }
         for f in changed_fields
     }
     await AuditService(db).log(
@@ -322,12 +383,17 @@ async def update_record(
         resource_type="record",
         resource_id=str(record_id),
         details={
-            "app_id": str(app_id), "entity_id": str(entity_id),
-            "changed_fields": changed_fields, "field_changes": field_changes,
+            "app_id": str(app_id),
+            "entity_id": str(entity_id),
+            "changed_fields": changed_fields,
+            "field_changes": field_changes,
         },
     )
-    mask_fields = sensitive_names - restrictions.explicit_read_allow - restrictions.denied_read \
-        if not current_user.has_role("platform_admin") else set()
+    mask_fields = (
+        sensitive_names - restrictions.explicit_read_allow - restrictions.denied_read
+        if not current_user.has_role("platform_admin")
+        else set()
+    )
     return _apply_abac(record, restrictions.denied_read, mask_fields)
 
 
@@ -342,24 +408,38 @@ async def delete_record(
 ) -> None:
     await _resolve_entity(app_id, entity_id, current_user, db)
     if hard and not current_user.has_role("platform_admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Hard delete requires platform_admin")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Hard delete requires platform_admin"
+        )
     try:
         # Pre-delete snapshot, just for the audit trail — delete_record re-checks
         # ABAC/existence itself right after, so this doesn't weaken enforcement.
         deleted = await RecordService(db).get_record(
-            entity_id, record_id, actor_id=current_user.user_id, actor_roles=current_user.roles,
+            entity_id,
+            record_id,
+            actor_id=current_user.user_id,
+            actor_roles=current_user.roles,
         )
         await RecordService(db).delete_record(
-            entity_id, record_id, hard=hard,
-            actor_id=current_user.user_id, actor_roles=current_user.roles,
+            entity_id,
+            record_id,
+            hard=hard,
+            actor_id=current_user.user_id,
+            actor_roles=current_user.roles,
         )
     except RecordNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Record not found"
+        ) from exc
 
     sensitive_names = await RecordService(db).get_sensitive_field_names(entity_id)
     audit_payload = (
-        {k: (field_crypto.mask_value(v) if k in sensitive_names else v) for k, v in deleted.payload.items()}
-        if sensitive_names else deleted.payload
+        {
+            k: (field_crypto.mask_value(v) if k in sensitive_names else v)
+            for k, v in deleted.payload.items()
+        }
+        if sensitive_names
+        else deleted.payload
     )
     await AuditService(db).log(
         "record.deleted",
@@ -367,7 +447,9 @@ async def delete_record(
         resource_type="record",
         resource_id=str(record_id),
         details={
-            "app_id": str(app_id), "entity_id": str(entity_id), "hard": hard,
+            "app_id": str(app_id),
+            "entity_id": str(entity_id),
+            "hard": hard,
             "payload": audit_payload,
         },
     )
@@ -385,14 +467,22 @@ async def restore_record(
     try:
         return await RecordService(db).restore_record(entity_id, record_id)
     except RecordNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deleted record not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Deleted record not found"
+        ) from exc
 
 
 # ------------------------------------------------------------------
 # File attachments (nested under records)
 # ------------------------------------------------------------------
 
-@router.post("/{record_id}/files", response_model=RecordFileRead, status_code=status.HTTP_201_CREATED, tags=["files"])
+
+@router.post(
+    "/{record_id}/files",
+    response_model=RecordFileRead,
+    status_code=status.HTTP_201_CREATED,
+    tags=["files"],
+)
 @limiter.limit("20/minute")
 async def upload_file(
     app_id: uuid.UUID,
@@ -408,16 +498,26 @@ async def upload_file(
         description="Version the field's current file instead of adding an independent one",
     ),
     max_files: int | None = Query(
-        default=None, ge=1,
-        description="Block-level cap on files per record; can only tighten the platform ceiling, never raise it",
+        default=None,
+        ge=1,
+        description=(
+            "Block-level cap on files per record; can only tighten the "
+            "platform ceiling, never raise it"
+        ),
     ),
 ) -> RecordFileRead:
     await _resolve_entity(app_id, entity_id, current_user, db)
     svc = FileService(db, get_storage(), get_antivirus())
     try:
         return await svc.upload_file(
-            app_id, entity_id, record_id, field_name, file,
-            actor_id=current_user.user_id, replace=replace, max_files=max_files,
+            app_id,
+            entity_id,
+            record_id,
+            field_name,
+            file,
+            actor_id=current_user.user_id,
+            replace=replace,
+            max_files=max_files,
         )
     except FileError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
@@ -438,7 +538,9 @@ async def list_files(
     return await svc.list_files(record_id, field_name=field_name, include_all_versions=all_versions)
 
 
-@router.get("/{record_id}/files/{file_id}/versions", response_model=list[RecordFileRead], tags=["files"])
+@router.get(
+    "/{record_id}/files/{file_id}/versions", response_model=list[RecordFileRead], tags=["files"]
+)
 async def list_file_versions(
     app_id: uuid.UUID,
     entity_id: uuid.UUID,
@@ -452,7 +554,7 @@ async def list_file_versions(
     svc = FileService(db, get_storage(), get_antivirus())
     try:
         return await svc.list_versions(file_id)
-    except FileNotFoundError as exc:
+    except RecordFileNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found") from exc
 
 
@@ -470,7 +572,7 @@ async def get_download_url(
     svc = FileService(db, get_storage(), get_antivirus())
     try:
         return await svc.get_download_url(file_id, expires=expires)
-    except FileNotFoundError as exc:
+    except RecordFileNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found") from exc
 
 
@@ -507,10 +609,16 @@ async def import_records(
     column_map: str | None = Query(default=None, description="JSON map of CSV header → field name"),
     on_error: Literal["skip", "abort"] = Query(
         default="skip",
-        description="'skip': import valid rows, report the rest as errors. 'abort': roll back the whole import if any row fails.",
+        description=(
+            "'skip': import valid rows, report the rest as errors. "
+            "'abort': roll back the whole import if any row fails."
+        ),
     ),
     key_field: str | None = Query(
-        default=None, description="Field to match existing records by — matches are updated instead of duplicated",
+        default=None,
+        description=(
+            "Field to match existing records by — matches are updated instead of duplicated"
+        ),
     ),
 ) -> dict[str, Any]:
     """
@@ -534,9 +642,14 @@ async def import_records(
 
     try:
         result = await ImportService(db).import_records(
-            app_id, entity_id, data, filename,
-            column_map=parsed_map, actor_id=current_user.user_id,
-            on_error=on_error, key_field=key_field,
+            app_id,
+            entity_id,
+            data,
+            filename,
+            column_map=parsed_map,
+            actor_id=current_user.user_id,
+            on_error=on_error,
+            key_field=key_field,
         )
     except ImportFileError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
@@ -551,7 +664,9 @@ async def import_records(
     }
 
 
-@router.delete("/{record_id}/files/{file_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["files"])
+@router.delete(
+    "/{record_id}/files/{file_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["files"]
+)
 async def delete_file(
     app_id: uuid.UUID,
     entity_id: uuid.UUID,
@@ -564,5 +679,5 @@ async def delete_file(
     svc = FileService(db, get_storage(), get_antivirus())
     try:
         await svc.delete_file(file_id, actor_id=current_user.user_id)
-    except FileNotFoundError as exc:
+    except RecordFileNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found") from exc

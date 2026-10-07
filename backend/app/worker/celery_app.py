@@ -30,18 +30,18 @@ celery_app.conf.update(
     enable_utc=True,
     # Task routing
     task_queues=[
-        Queue("default",       Exchange("default"),       routing_key="default"),
+        Queue("default", Exchange("default"), routing_key="default"),
         Queue("notifications", Exchange("notifications"), routing_key="notifications"),
-        Queue("exports",       Exchange("exports"),       routing_key="exports"),
-        Queue("sandbox",       Exchange("sandbox"),       routing_key="sandbox"),
-        Queue("integration",   Exchange("integration"),   routing_key="integration"),
+        Queue("exports", Exchange("exports"), routing_key="exports"),
+        Queue("sandbox", Exchange("sandbox"), routing_key="sandbox"),
+        Queue("integration", Exchange("integration"), routing_key="integration"),
     ],
     task_default_queue="default",
     task_routes={
         "app.worker.tasks.notifications.*": {"queue": "notifications"},
-        "app.worker.tasks.exports.*":       {"queue": "exports"},
-        "app.worker.tasks.sandbox.*":       {"queue": "sandbox"},
-        "app.worker.tasks.integration.*":   {"queue": "integration"},
+        "app.worker.tasks.exports.*": {"queue": "exports"},
+        "app.worker.tasks.sandbox.*": {"queue": "sandbox"},
+        "app.worker.tasks.integration.*": {"queue": "integration"},
     },
     # Reliability
     task_acks_late=True,
@@ -74,7 +74,7 @@ celery_app.conf.update(
 
 
 @worker_process_init.connect
-def _dispose_inherited_db_pool(**kwargs) -> None:
+def _dispose_inherited_db_pool(**kwargs: object) -> None:
     """Celery's prefork pool forks worker child processes *after*
     `app.core.database` has already been imported (via the `include=[...]`
     task modules above) and its module-level async engine/connection pool
@@ -96,4 +96,5 @@ def _dispose_inherited_db_pool(**kwargs) -> None:
     object references is enough, since nothing in it is actually usable
     post-fork regardless."""
     from app.core.database import engine
+
     engine.sync_engine.dispose()

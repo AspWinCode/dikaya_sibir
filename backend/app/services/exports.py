@@ -1,4 +1,5 @@
 """ExportService: generate XLSX, CSV, or PDF from entity records."""
+
 from __future__ import annotations
 
 import csv
@@ -29,18 +30,20 @@ class ExportService:
         self,
         entity_id: uuid.UUID,
         params: Any,  # RecordListParams
-        format: str = "xlsx",
+        export_format: str = "xlsx",
         actor_id: uuid.UUID | None = None,
         actor_roles: list[str] | None = None,
     ) -> bytes:
         """Fetch all matching records and return serialized file bytes."""
         from app.services.records import RecordService
-        from app.schemas.records import RecordListParams
 
         # Override limit to export cap; fetch up to _MAX_EXPORT_ROWS
         export_params = params.model_copy(update={"limit": min(params.limit, _MAX_EXPORT_ROWS)})
         page = await RecordService(self._db).list_records(
-            entity_id, export_params, actor_id=actor_id, actor_roles=actor_roles,
+            entity_id,
+            export_params,
+            actor_id=actor_id,
+            actor_roles=actor_roles,
         )
         records = page.items
 
@@ -58,10 +61,14 @@ class ExportService:
                     headers.append(k)
                     seen.add(k)
 
-        logger.info("export_started", entity_id=str(entity_id), format=format,
-                    row_count=len(payloads))
+        logger.info(
+            "export_started",
+            entity_id=str(entity_id),
+            export_format=export_format,
+            row_count=len(payloads),
+        )
 
-        match format:
+        match export_format:
             case "csv":
                 return self._to_csv(headers, payloads)
             case "xlsx":
@@ -69,7 +76,7 @@ class ExportService:
             case "pdf":
                 return self._to_pdf(headers, payloads)
             case _:
-                raise ExportError(f"Unsupported export format: {format!r}")
+                raise ExportError(f"Unsupported export format: {export_format!r}")
 
     # ------------------------------------------------------------------
     # Serializers
@@ -78,8 +85,9 @@ class ExportService:
     @staticmethod
     def _to_csv(headers: list[str], rows: list[dict[str, Any]]) -> bytes:
         buf = io.StringIO()
-        writer = csv.DictWriter(buf, fieldnames=headers, extrasaction="ignore",
-                                lineterminator="\r\n")
+        writer = csv.DictWriter(
+            buf, fieldnames=headers, extrasaction="ignore", lineterminator="\r\n"
+        )
         writer.writeheader()
         writer.writerows(rows)
         return buf.getvalue().encode("utf-8-sig")  # BOM for Excel compatibility
@@ -87,13 +95,14 @@ class ExportService:
     @staticmethod
     def _to_xlsx(headers: list[str], rows: list[dict[str, Any]]) -> bytes:
         try:
-            import openpyxl  # noqa: PLC0415
-            from openpyxl.styles import Font, PatternFill  # noqa: PLC0415
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill
         except ImportError as exc:
             raise ExportError("openpyxl is required for XLSX export", status_code=501) from exc
 
         wb = openpyxl.Workbook()
         ws = wb.active
+        assert ws is not None  # a freshly created Workbook always has an active sheet
         ws.title = "Records"
 
         header_font = Font(bold=True, color="FFFFFF")
@@ -110,7 +119,7 @@ class ExportService:
         for row_idx, payload in enumerate(rows, start=2):
             for col_idx, header in enumerate(headers, start=1):
                 val = payload.get(header)
-                if isinstance(val, (list, dict)):
+                if isinstance(val, list | dict):
                     val = str(val)
                 ws.cell(row=row_idx, column=col_idx, value=val)
 
@@ -121,7 +130,7 @@ class ExportService:
     @staticmethod
     def _to_pdf(headers: list[str], rows: list[dict[str, Any]]) -> bytes:
         try:
-            from fpdf import FPDF  # noqa: PLC0415
+            from fpdf import FPDF
         except ImportError as exc:
             raise ExportError("fpdf2 is required for PDF export", status_code=501) from exc
 

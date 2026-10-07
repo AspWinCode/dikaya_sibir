@@ -16,6 +16,7 @@ ever existed. This also gives chained lookups "for free": a lookup used
 inside another lookup's `filter` is resolved bottom-up by the same recursion,
 so "деталь_отчёта -> рецепт -> номенклатура" is just two nested lookup nodes.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -29,7 +30,7 @@ from app.engine.interpreter import ExecutionContext, RuleError
 from app.models.data import Record
 
 
-class LookupError(Exception):
+class RuleLookupError(Exception):
     pass
 
 
@@ -82,16 +83,16 @@ async def resolve_lookups(node: Any, db: AsyncSession, ctx: ExecutionContext) ->
 async def _execute_lookup(node: dict[str, Any], db: AsyncSession, ctx: ExecutionContext) -> Any:
     entity_id_raw = node.get("entity_id")
     if not entity_id_raw:
-        raise LookupError("lookup.entity_id is required")
+        raise RuleLookupError("lookup.entity_id is required")
     try:
         entity_id = uuid.UUID(str(entity_id_raw))
     except ValueError as exc:
-        raise LookupError(f"lookup.entity_id is not a valid UUID: {entity_id_raw!r}") from exc
+        raise RuleLookupError(f"lookup.entity_id is not a valid UUID: {entity_id_raw!r}") from exc
 
     agg = node.get("agg", "value")
     field_name = node.get("field")
     if agg != "count" and not field_name:
-        raise LookupError("lookup.field is required unless agg is 'count'")
+        raise RuleLookupError("lookup.field is required unless agg is 'count'")
 
     stmt = select(Record).where(Record.entity_id == entity_id, Record.is_deleted.is_(False))
 
@@ -99,9 +100,15 @@ async def _execute_lookup(node: dict[str, Any], db: AsyncSession, ctx: Execution
         # Each filter value is itself resolved first — this is how a
         # chained lookup ("filter номенклатура by the material_id a
         # preceding lookup returned") falls out of the same recursion.
-        resolved = await resolve_lookups(filter_expr, db, ctx) if isinstance(filter_expr, dict) else filter_expr
-        filter_value = resolved["value"] if isinstance(resolved, dict) and resolved.get("type") == "literal" else (
-            evaluate(resolved, ctx.record) if isinstance(resolved, dict) else resolved
+        resolved = (
+            await resolve_lookups(filter_expr, db, ctx)
+            if isinstance(filter_expr, dict)
+            else filter_expr
+        )
+        filter_value = (
+            resolved["value"]
+            if isinstance(resolved, dict) and resolved.get("type") == "literal"
+            else (evaluate(resolved, ctx.record) if isinstance(resolved, dict) else resolved)
         )
         if filter_value is None:
             # An unresolvable filter (e.g. the chained id wasn't found) means
@@ -113,14 +120,11 @@ async def _execute_lookup(node: dict[str, Any], db: AsyncSession, ctx: Execution
             try:
                 stmt = stmt.where(Record.id == uuid.UUID(str(filter_value)))
             except ValueError as exc:
-                raise LookupError(f"filter.id is not a valid UUID: {filter_value!r}") from exc
+                raise RuleLookupError(f"filter.id is not a valid UUID: {filter_value!r}") from exc
         else:
             stmt = stmt.where(_jsonb_text(filter_field) == str(filter_value))
 
-    if agg == "count":
-        stmt = stmt.limit(1001)  # sanity cap, same order of magnitude as other rule limits
-    else:
-        stmt = stmt.limit(1001)
+    stmt = stmt.limit(1001)  # sanity cap, same order of magnitude as other rule limits
 
     result = await db.execute(stmt)
     records = list(result.scalars().all())

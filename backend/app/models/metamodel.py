@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -48,9 +48,7 @@ class Entity(Base):
         {"schema": "metamodel"},
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     app_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("catalog.app.id", ondelete="CASCADE"),
@@ -79,11 +77,15 @@ class Entity(Base):
         "Field", back_populates="entity", cascade="all, delete-orphan", lazy="selectin"
     )
     outgoing_relations: Mapped[list["Relation"]] = relationship(
-        "Relation", foreign_keys="[Relation.from_entity_id]", back_populates="from_entity",
+        "Relation",
+        foreign_keys="[Relation.from_entity_id]",
+        back_populates="from_entity",
         passive_deletes=True,
     )
     incoming_relations: Mapped[list["Relation"]] = relationship(
-        "Relation", foreign_keys="[Relation.to_entity_id]", back_populates="to_entity",
+        "Relation",
+        foreign_keys="[Relation.to_entity_id]",
+        back_populates="to_entity",
         passive_deletes=True,
     )
 
@@ -95,9 +97,7 @@ class Field(Base):
         {"schema": "metamodel"},
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     entity_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("metamodel.entity.id", ondelete="CASCADE"),
@@ -139,9 +139,7 @@ class Relation(Base):
     __tablename__ = "relation"
     __table_args__ = {"schema": "metamodel"}
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     app_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     from_entity_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

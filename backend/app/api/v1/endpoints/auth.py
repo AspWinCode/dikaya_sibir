@@ -19,9 +19,9 @@ from app.schemas.auth import (
     ResetPasswordRequest,
     SessionPolicyRead,
     SessionPolicyUpdate,
+    TokenPair,
     TOTPSetupResponse,
     TOTPVerifyRequest,
-    TokenPair,
     VkCallbackRequest,
     YandexCallbackRequest,
 )
@@ -75,7 +75,11 @@ async def logout_all(current_user: AuthDep, db: DbDep) -> None:
     await _svc(db).logout_all(current_user.user_id)
 
 
-@router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT, summary="Request password reset email")
+@router.post(
+    "/forgot-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Request password reset email",
+)
 @limiter.limit("5/minute")
 async def forgot_password(req: ForgotPasswordRequest, request: Request, db: DbDep) -> None:
     try:
@@ -84,7 +88,11 @@ async def forgot_password(req: ForgotPasswordRequest, request: Request, db: DbDe
         raise _map_auth_error(exc) from exc
 
 
-@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT, summary="Set new password using reset token")
+@router.post(
+    "/reset-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Set new password using reset token",
+)
 @limiter.limit("10/minute")
 async def reset_password(req: ResetPasswordRequest, request: Request, db: DbDep) -> None:
     try:
@@ -94,9 +102,7 @@ async def reset_password(req: ResetPasswordRequest, request: Request, db: DbDep)
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
-async def change_password(
-    req: ChangePasswordRequest, current_user: AuthDep, db: DbDep
-) -> None:
+async def change_password(req: ChangePasswordRequest, current_user: AuthDep, db: DbDep) -> None:
     try:
         await _svc(db).change_password(current_user.user_id, req)
     except AuthError as exc:
@@ -105,9 +111,11 @@ async def change_password(
 
 # ---- TOTP ----
 
+
 @router.post("/totp/setup", response_model=TOTPSetupResponse, summary="Get TOTP provisioning URI")
 async def totp_setup(current_user: AuthDep, db: DbDep) -> TOTPSetupResponse:
     from sqlalchemy import select
+
     from app.models.identity import User
 
     result = await db.execute(select(User).where(User.id == current_user.user_id))
@@ -127,6 +135,7 @@ async def totp_setup(current_user: AuthDep, db: DbDep) -> TOTPSetupResponse:
 )
 async def totp_enable(req: TOTPVerifyRequest, current_user: AuthDep, db: DbDep) -> None:
     from sqlalchemy import select
+
     from app.models.identity import User
 
     result = await db.execute(select(User).where(User.id == current_user.user_id))
@@ -146,6 +155,7 @@ async def totp_enable(req: TOTPVerifyRequest, current_user: AuthDep, db: DbDep) 
 )
 async def totp_disable(req: TOTPVerifyRequest, current_user: AuthDep, db: DbDep) -> None:
     from sqlalchemy import select
+
     from app.models.identity import User
 
     result = await db.execute(select(User).where(User.id == current_user.user_id))
@@ -159,6 +169,7 @@ async def totp_disable(req: TOTPVerifyRequest, current_user: AuthDep, db: DbDep)
 
 
 # ---- LDAP ----
+
 
 @router.post("/ldap-login", response_model=TokenPair, summary="LDAP/AD login")
 @limiter.limit("10/minute")
@@ -176,7 +187,9 @@ async def ldap_login(req: LdapLoginRequest, request: Request, db: DbDep) -> Toke
 @router.get("/ldap-status", summary="Return LDAP configuration status (no secrets)")
 async def ldap_status(current_user: AuthDep) -> dict:
     if not current_user.has_role("platform_admin", "org_admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
     return {
         "enabled": settings.LDAP_ENABLED,
         "url": settings.LDAP_URL if settings.LDAP_ENABLED else None,
@@ -188,14 +201,18 @@ async def ldap_status(current_user: AuthDep) -> dict:
 @router.post("/ldap-test", summary="Test LDAP connection with current settings")
 async def ldap_test(current_user: AuthDep) -> dict:
     if not current_user.has_role("platform_admin", "org_admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
     if not settings.LDAP_ENABLED:
         return {"ok": False, "error": "LDAP не включён (LDAP_ENABLED=false)"}
     try:
-        from app.core.ldap_auth import LdapAuthError, LdapClient
         import ldap3  # type: ignore[import-untyped]
+
         server = ldap3.Server(settings.LDAP_URL, get_info=ldap3.ALL, connect_timeout=5)
-        conn = ldap3.Connection(server, settings.LDAP_BIND_DN, settings.LDAP_BIND_PASSWORD, auto_bind=True)
+        conn = ldap3.Connection(
+            server, settings.LDAP_BIND_DN, settings.LDAP_BIND_PASSWORD, auto_bind=True
+        )
         conn.unbind()
         return {"ok": True, "message": f"Соединение с {settings.LDAP_URL} установлено"}
     except Exception as exc:
@@ -204,59 +221,95 @@ async def ldap_test(current_user: AuthDep) -> dict:
 
 # ---- Password policy ----
 
-@router.get("/password-policy", response_model=PasswordPolicyRead, summary="Get current password policy")
+
+@router.get(
+    "/password-policy", response_model=PasswordPolicyRead, summary="Get current password policy"
+)
 async def get_password_policy(db: DbDep) -> PasswordPolicyRead:
     from app.services.password_policy import PasswordPolicyService
+
     policy = await PasswordPolicyService(db).get()
     return PasswordPolicyRead.model_validate(policy)
 
 
-@router.put("/password-policy", response_model=PasswordPolicyRead, summary="Update password policy (admin only)")
-async def update_password_policy(body: PasswordPolicyUpdate, current_user: AuthDep, db: DbDep) -> PasswordPolicyRead:
+@router.put(
+    "/password-policy",
+    response_model=PasswordPolicyRead,
+    summary="Update password policy (admin only)",
+)
+async def update_password_policy(
+    body: PasswordPolicyUpdate, current_user: AuthDep, db: DbDep
+) -> PasswordPolicyRead:
     if not current_user.has_role("platform_admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
     from app.services.password_policy import PasswordPolicyService
+
     policy = await PasswordPolicyService(db).update(body)
     return PasswordPolicyRead.model_validate(policy)
 
 
 # ---- Session policy ----
 
-@router.get("/session-policy", response_model=SessionPolicyRead, summary="Get current session policy")
+
+@router.get(
+    "/session-policy", response_model=SessionPolicyRead, summary="Get current session policy"
+)
 async def get_session_policy(db: DbDep) -> SessionPolicyRead:
     from app.services.session_policy import SessionPolicyService
+
     policy = await SessionPolicyService(db).get()
     return SessionPolicyRead.model_validate(policy)
 
 
-@router.put("/session-policy", response_model=SessionPolicyRead, summary="Update session policy (admin only)")
-async def update_session_policy(body: SessionPolicyUpdate, current_user: AuthDep, db: DbDep) -> SessionPolicyRead:
+@router.put(
+    "/session-policy",
+    response_model=SessionPolicyRead,
+    summary="Update session policy (admin only)",
+)
+async def update_session_policy(
+    body: SessionPolicyUpdate, current_user: AuthDep, db: DbDep
+) -> SessionPolicyRead:
     if not current_user.has_role("platform_admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
     from app.services.session_policy import SessionPolicyService
+
     policy = await SessionPolicyService(db).update(body)
     return SessionPolicyRead.model_validate(policy)
 
 
 # ---- File policy ----
 
+
 @router.get("/file-policy", response_model=FilePolicyRead, summary="Get current file upload policy")
 async def get_file_policy(db: DbDep) -> FilePolicyRead:
     from app.services.file_policy import FilePolicyService
+
     policy = await FilePolicyService(db).get()
     return FilePolicyRead.model_validate(policy)
 
 
-@router.put("/file-policy", response_model=FilePolicyRead, summary="Update file upload policy (admin only)")
-async def update_file_policy(body: FilePolicyUpdate, current_user: AuthDep, db: DbDep) -> FilePolicyRead:
+@router.put(
+    "/file-policy", response_model=FilePolicyRead, summary="Update file upload policy (admin only)"
+)
+async def update_file_policy(
+    body: FilePolicyUpdate, current_user: AuthDep, db: DbDep
+) -> FilePolicyRead:
     if not current_user.has_role("platform_admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
     from app.services.file_policy import FilePolicyService
+
     policy = await FilePolicyService(db).update(body)
     return FilePolicyRead.model_validate(policy)
 
 
 # ---- Яндекс ID ----
+
 
 @router.get("/yandex", summary="Redirect to Yandex OAuth")
 async def yandex_redirect() -> RedirectResponse:
@@ -277,6 +330,7 @@ async def yandex_callback(req: YandexCallbackRequest, request: Request, db: DbDe
 
 
 # ---- VK ID ----
+
 
 @router.get("/vk", summary="Redirect to VK OAuth")
 async def vk_redirect() -> RedirectResponse:
