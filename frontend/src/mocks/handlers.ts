@@ -1,7 +1,7 @@
 import { http, HttpResponse } from "msw";
 import type { App, CursorPage } from "@/shared/api/apps";
 import type { CurrentUser, TokenPair } from "@/shared/api/auth";
-import type { EntityRead, FieldRead } from "@/shared/api/entities";
+import type { EntityRead, FieldRead, RelationRead } from "@/shared/api/entities";
 import type { Rule } from "@/shared/api/rules";
 import type { User, UserRole } from "@/shared/api/users";
 import type { RecordRead, TrashedRecordRead } from "@/shared/api/records";
@@ -246,6 +246,10 @@ function buildEntities(appId: string): EntityRead[] {
 
 /* entities is keyed by appId */
 const entitiesByApp: Record<string, EntityRead[]> = {};
+
+/* relations is keyed by appId — no mock relation-creation flow (yet), so
+   this always starts empty; the handler just needs to return an array. */
+const relationsByApp: Record<string, RelationRead[]> = {};
 
 const rules: Rule[] = [
   {
@@ -944,6 +948,15 @@ export const handlers = [
       if (idx !== -1) entitiesByApp[appId].splice(idx, 1);
     }
     return new HttpResponse(null, { status: 204 });
+  }),
+
+  // Relations — no mock data by default (no handler previously existed at
+  // all, so the request fell through unhandled and `listRelations`'s
+  // caller got something that wasn't an array; RulesPage's "Обновить
+  // связанную запись" action needs a real array back, even an empty one).
+  http.get(`${API}/apps/:appId/relations`, ({ params }) => {
+    const appId = params.appId as string;
+    return HttpResponse.json(relationsByApp[appId] ?? []);
   }),
 
   // Fields

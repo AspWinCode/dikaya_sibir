@@ -5,7 +5,7 @@ import { PreviewPanel } from "@/components/layout/PreviewPanel";
 import { cn } from "@/lib/cn";
 import { useApps } from "@/shared/hooks/useApps";
 import { useActiveApp } from "@/shared/hooks/useActiveApp";
-import { useEntities } from "@/shared/hooks/useEntities";
+import { useEntities, useRelations } from "@/shared/hooks/useEntities";
 import { useEntityRules, useCreateRule, useUpdateRule, useDeleteRule, useTestRule, useRuleLogs, useRuleConflicts, useRuleWebhookDeliveries } from "@/shared/hooks/useRules";
 import type { EntityRead, FieldRead } from "@/shared/api/entities";
 import type { Rule, RuleTrigger, RuleTestResponse, RuleExecutionLogRead, RuleConflictLogRead } from "@/shared/api/rules";
@@ -46,6 +46,16 @@ interface CondRow { id: string; field: string; op: string; valueType: "literal" 
 interface ActionRow {
   id: string; type: string; field: string; value: string; message: string; url: string;
   notifyToType: "literal" | "field_ref"; notifyTo: string; notifySubject: string; notifyTemplate: string;
+  // update_record only ("Обновить связанную запись" — ТЗ: write an
+  // aggregated value from this entity into a record of a DIFFERENT entity
+  // reached via a relation field on this one, e.g. "сумма операций по
+  // работнику"): `recordIdField` is the relation field (on the entity this
+  // rule is attached to) whose value is the target record's real id;
+  // `value`/`valueType`/`lookup` describe what to write into `field` on
+  // that target record, same three-way choice a condition's value has.
+  recordIdField: string;
+  valueType: "literal" | "field_ref" | "lookup";
+  lookup: LookupConfig | null;
 }
 
 const TRIGGER_EVENTS = [
@@ -76,6 +86,7 @@ const COMPARE_OPS = [
 
 const AUTOMATION_ACTION_TYPES = [
   { value: "set_field",          label: "Установить значение поля" },
+  { value: "update_record",      label: "Обновить связанную запись" },
   { value: "send_notification",  label: "Отправить уведомление" },
   { value: "call_webhook",       label: "Вызвать Webhook" },
   { value: "stop",               label: "Остановить выполнение правил" },
@@ -155,6 +166,17 @@ function parseConditions(raw: Record<string, unknown>): CondRow[] {
   return [];
 }
 
+/* Build a single expression node for an action's `value` field — the same
+   three-way choice a condition's compare value has, plus field_ref (an
+   action's value can reference another field on the SAME triggering
+   record, which a condition's compare doesn't need since `field` already
+   names that side of the comparison). */
+function buildActionValueExpr(r: ActionRow): Record<string, unknown> {
+  if (r.valueType === "lookup" && r.lookup) return buildLookupNode(r.lookup);
+  if (r.valueType === "field_ref") return { type: "field_ref", field: r.value };
+  return { type: "literal", value: r.value };
+}
+
 /* ── Serialize action rows → API list.
    set_field used to send {field_name: ...} — the backend action schema
    (and the interpreter) only ever read `field`, so every set_field action
@@ -165,6 +187,13 @@ function parseConditions(raw: Record<string, unknown>): CondRow[] {
 function buildActions(rows: ActionRow[]): Record<string, unknown>[] {
   return rows.map((r) => {
     if (r.type === "set_field") return { type: "set_field", field: r.field, value: r.value };
+    if (r.type === "update_record") {
+      return {
+        type: "update_record",
+        record_id_field: r.recordIdField,
+        payload: { [r.field]: buildActionValueExpr(r) },
+      };
+    }
     if (r.type === "send_notification") {
       return {
         type: "send_notification",
@@ -181,18 +210,43 @@ function buildActions(rows: ActionRow[]): Record<string, unknown>[] {
 
 /* ── Parse API actions list → rows ── */
 function parseActions(acts: Record<string, unknown>[]): ActionRow[] {
-  return (acts ?? []).map((a) => ({
+  return (acts ?? []).map((a) => {
+    let field = String((a.field as string) ?? (a.field_name as string) ?? "");
+    let valueType: ActionRow["valueType"] = "literal";
+    let value = String(a.value ?? "");
+    let lookup: LookupConfig | null = null;
+    if (a.type === "update_record") {
+      const payload = (a.payload as Record<string, unknown>) ?? {};
+      const [k, v] = Object.entries(payload)[0] ?? ["", null];
+      field = k;
+      if (v && typeof v === "object" && (v as Record<string, unknown>).type === "lookup") {
+        valueType = "lookup";
+        lookup = parseLookupNode(v as Record<string, unknown>);
+      } else if (v && typeof v === "object" && (v as Record<string, unknown>).type === "field_ref") {
+        valueType = "field_ref";
+        value = String((v as Record<string, unknown>).field ?? "");
+      } else if (v && typeof v === "object" && (v as Record<string, unknown>).type === "literal") {
+        value = String((v as Record<string, unknown>).value ?? "");
+      } else {
+        value = String(v ?? "");
+      }
+    }
+    return {
     id:      uid(),
     type:    String(a.type ?? "set_field"),
-    field:   String((a.field as string) ?? (a.field_name as string) ?? ""),
-    value:   String(a.value ?? ""),
+    field,
+    value,
+    valueType,
+    lookup,
+    recordIdField: String((a.record_id_field as string) ?? ""),
     message: String(a.message ?? ""),
     url:     String(a.url ?? ""),
     notifyToType: a.to_field ? "field_ref" : "literal",
     notifyTo:      String((a.to_field as string) ?? (a.to as string) ?? ""),
     notifySubject: String(a.subject ?? ""),
     notifyTemplate: String(a.template ?? ""),
-  }));
+    };
+  });
 }
 
 /* ── Blank form state ── */
@@ -372,6 +426,9 @@ function RuleModal({
   const updateMut = useUpdateRule(appId);
   const isValidation = ruleType === "validation";
   const actionTypes = isValidation ? VALIDATION_ACTION_TYPES : AUTOMATION_ACTION_TYPES;
+  // Only "update_record" needs relation metadata (to resolve a relation
+  // field on this entity to the related entity whose record gets updated).
+  const { data: relations = [] } = useRelations(appId);
 
   const [form, setForm] = useState(() => {
     if (rule) {
@@ -397,7 +454,7 @@ function RuleModal({
       };
     }
     const blank = blankForm(entityId);
-    if (isValidation) blank.actions = [{ id: uid(), type: "block_save", field: "", value: "", message: "", url: "", notifyToType: "literal", notifyTo: "", notifySubject: "", notifyTemplate: "" }];
+    if (isValidation) blank.actions = [{ id: uid(), type: "block_save", field: "", value: "", message: "", url: "", notifyToType: "literal", notifyTo: "", notifySubject: "", notifyTemplate: "", recordIdField: "", valueType: "literal", lookup: null }];
     return blank;
   });
 
@@ -427,6 +484,7 @@ function RuleModal({
     setForm((p) => ({ ...p, actions: [...p.actions, {
       id: uid(), type: defaultType, field: userFields[0]?.name ?? "", value: "", message: "", url: "",
       notifyToType: "literal", notifyTo: "", notifySubject: "", notifyTemplate: "",
+      recordIdField: "", valueType: "literal", lookup: null,
     }] }));
   }
   function patchAction(id: string, patch: Partial<ActionRow>) {
@@ -718,6 +776,85 @@ function RuleModal({
                         />
                       </div>
                     )}
+                    {a.type === "update_record" && (() => {
+                      const relationFields = userFields.filter((f) => f.field_type === "relation");
+                      const rel = relations.find(
+                        (r) => r.from_entity_id === entityId && r.from_field_name === a.recordIdField
+                      );
+                      const targetEntity = rel ? entities.find((e) => e.id === rel.to_entity_id) : null;
+                      const targetFields = (targetEntity?.fields ?? []).filter((f) => !f.is_system);
+                      return (
+                        <div className="flex flex-col gap-2">
+                          <div className="flex gap-2 items-center">
+                            <span className="text-[12px] text-primary/50 shrink-0">Через связь</span>
+                            <select
+                              value={a.recordIdField}
+                              onChange={(e) => patchAction(a.id, { recordIdField: e.target.value, field: "" })}
+                              className="h-[34px] flex-1 border border-cardbg rounded-[8px] px-2 text-[13px] bg-white focus:outline-none focus:border-cta"
+                            >
+                              <option value="">— выберите поле-связь —</option>
+                              {relationFields.map((f) => <option key={f.id} value={f.name}>{f.display_name}</option>)}
+                            </select>
+                          </div>
+                          {a.recordIdField && (
+                            <div className="flex gap-2 items-center">
+                              <span className="text-[12px] text-primary/50 shrink-0">Поле там</span>
+                              <select
+                                value={a.field}
+                                onChange={(e) => patchAction(a.id, { field: e.target.value })}
+                                className="h-[34px] flex-1 border border-cardbg rounded-[8px] px-2 text-[13px] bg-white focus:outline-none focus:border-cta"
+                                disabled={!targetEntity}
+                              >
+                                <option value="">— выберите поле —</option>
+                                {targetFields.map((f) => <option key={f.id} value={f.name}>{f.display_name}</option>)}
+                              </select>
+                            </div>
+                          )}
+                          {a.recordIdField && a.field && (
+                            <div className="flex gap-2 items-center">
+                              <select
+                                value={a.valueType}
+                                onChange={(e) => {
+                                  const vt = e.target.value as ActionRow["valueType"];
+                                  patchAction(a.id, { valueType: vt, lookup: vt === "lookup" ? (a.lookup ?? blankLookup()) : a.lookup });
+                                }}
+                                className="h-[34px] w-[160px] shrink-0 border border-cardbg rounded-[8px] px-2 text-[13px] bg-white focus:outline-none focus:border-cta"
+                              >
+                                <option value="literal">Значение</option>
+                                <option value="field_ref">Поле текущей записи</option>
+                                <option value="lookup">Агрегация по таблице</option>
+                              </select>
+                              {a.valueType === "literal" && (
+                                <input
+                                  value={a.value}
+                                  onChange={(e) => patchAction(a.id, { value: e.target.value })}
+                                  placeholder="Значение"
+                                  className="h-[34px] flex-1 border border-cardbg rounded-[8px] px-2 text-[13px] focus:outline-none focus:border-cta"
+                                />
+                              )}
+                              {a.valueType === "field_ref" && (
+                                <select
+                                  value={a.value}
+                                  onChange={(e) => patchAction(a.id, { value: e.target.value })}
+                                  className="h-[34px] flex-1 border border-cardbg rounded-[8px] px-2 text-[13px] bg-white focus:outline-none focus:border-cta"
+                                >
+                                  <option value="">— поле текущей записи —</option>
+                                  {userFields.map((f) => <option key={f.id} value={f.name}>{f.display_name}</option>)}
+                                </select>
+                              )}
+                            </div>
+                          )}
+                          {a.recordIdField && a.field && a.valueType === "lookup" && a.lookup && (
+                            <LookupEditor
+                              value={a.lookup}
+                              onChange={(lk) => patchAction(a.id, { lookup: lk })}
+                              entities={entities}
+                              currentEntityFields={userFields}
+                            />
+                          )}
+                        </div>
+                      );
+                    })()}
                     {a.type === "send_notification" && (
                       <div className="flex flex-col gap-2">
                         <div className="flex gap-2">
