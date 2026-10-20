@@ -1,5 +1,7 @@
-"""Cross-table lookups for validation rules (ТЗ: "проверка достаточности
-материалов по рецепту при сохранении детали отчёта").
+"""Cross-table lookups (ТЗ: "проверка достаточности материалов по рецепту
+при сохранении детали отчёта"; also used by automation rules writing an
+aggregated value into a related record — e.g. "сумма операций по
+работнику").
 
 The main Rules Engine interpreter (app/engine/interpreter.py) and expression
 evaluator (app/engine/expressions.py) are deliberately pure/synchronous — no
@@ -7,14 +9,21 @@ I/O, no DB — by design (see RULES_AND_WORKFLOW.md principle 4). A "lookup"
 expression node needs to query a *different* entity's records, which is
 inherently async DB I/O, so it can't live inside that pure evaluator.
 
-Instead: before handing a validation rule's conditions/actions to the pure
-interpreter, `resolve_lookups()` walks the AST and replaces every unresolved
+Instead: before handing a rule's conditions/actions to the pure interpreter,
+`resolve_lookups()` walks the AST and replaces every unresolved
 {"type": "lookup", ...} node with a plain {"type": "literal", "value": ...}
 node (querying the DB to compute that value). The interpreter then evaluates
 the resulting tree exactly as it always has, none the wiser that a "lookup"
 ever existed. This also gives chained lookups "for free": a lookup used
 inside another lookup's `filter` is resolved bottom-up by the same recursion,
 so "деталь_отчёта -> рецепт -> номенклатура" is just two nested lookup nodes.
+
+Validation rules resolve their *conditions* this way synchronously,
+in-process, before commit (app/services/validation_rules.py). Automation
+rules — dispatched async to the sandbox Celery worker, which has no event
+loop/DB session until it builds one itself — resolve lookups inside their
+*actions* (and conditions) via `resolve_rule_lookups()` below, called from
+app/worker/tasks/sandbox.py before the pure interpreter runs.
 """
 
 from __future__ import annotations
@@ -153,3 +162,75 @@ async def _execute_lookup(node: dict[str, Any], db: AsyncSession, ctx: Execution
     if agg == "max":
         return max(numbers) if numbers else None
     raise RuleError(f"Unknown lookup.agg: {agg!r}")
+
+
+# Action types whose value is a single expression node (resolved the same
+# way a condition's compare `value` is).
+_ACTION_SINGLE_EXPR_KEYS = ("value",)
+# Action types whose value is a {field_name: expression} dict — each entry
+# resolved independently.
+_ACTION_EXPR_DICT_KEYS = ("payload", "match", "increment")
+
+
+def contains_lookup(node: Any) -> bool:
+    """Cheap, DB-free scan for whether `node` (a conditions tree, a single
+    action dict, or a list of either) contains any "lookup" subtree at all.
+    Lets callers skip opening a DB session entirely for the (overwhelming)
+    common case of rules that never use one."""
+    if isinstance(node, list):
+        return any(contains_lookup(item) for item in node)
+    if not isinstance(node, dict):
+        return False
+    if node.get("type") == "lookup":
+        return True
+    for key in ("children", "args"):
+        if contains_lookup(node.get(key, [])):
+            return True
+    for key in ("left", "right", "value"):
+        if contains_lookup(node.get(key)):
+            return True
+    for key in _ACTION_EXPR_DICT_KEYS:
+        if contains_lookup(list((node.get(key) or {}).values())):
+            return True
+    if contains_lookup(list((node.get("filter") or {}).values())):
+        return True
+    return False
+
+
+async def _resolve_action_lookups(
+    action: dict[str, Any], db: AsyncSession, ctx: ExecutionContext
+) -> dict[str, Any]:
+    """Resolve every "lookup" node reachable from one action dict — its
+    single-expression fields (set_field.value) and its {field: expr} dicts
+    (create_record.payload/match/increment, update_record.payload). Fields
+    that aren't present, or aren't expression dicts (a plain literal), pass
+    through unchanged."""
+    new_action = dict(action)
+    for key in _ACTION_SINGLE_EXPR_KEYS:
+        if isinstance(action.get(key), dict):
+            new_action[key] = await resolve_lookups(action[key], db, ctx)
+    for key in _ACTION_EXPR_DICT_KEYS:
+        sub = action.get(key)
+        if isinstance(sub, dict):
+            new_action[key] = {
+                k: (await resolve_lookups(v, db, ctx) if isinstance(v, dict) else v)
+                for k, v in sub.items()
+            }
+    return new_action
+
+
+async def resolve_rule_lookups(
+    conditions: dict[str, Any],
+    actions: list[dict[str, Any]],
+    db: AsyncSession,
+    ctx: ExecutionContext,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Resolve every "lookup" node inside one automation rule's conditions
+    and actions, before handing both to the pure interpreter. Mirrors what
+    ValidationRuleService does for a validation rule's conditions, extended
+    to actions — a "сумма операций по связанной записи"-style automation
+    rule (ТЗ: write an aggregated value into a related table's record) needs
+    its action's value resolved the same way a condition's does."""
+    resolved_conditions = await resolve_lookups(conditions, db, ctx) if conditions else conditions
+    resolved_actions = [await _resolve_action_lookups(a, db, ctx) for a in actions]
+    return resolved_conditions, resolved_actions

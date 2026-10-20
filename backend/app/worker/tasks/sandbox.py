@@ -17,6 +17,7 @@ from celery import shared_task
 
 from app.core.metrics import rule_executions
 from app.engine.interpreter import BatchResult, ExecutionContext, RuleOutcome, run_rules_batch
+from app.engine.lookup import contains_lookup
 
 logger = structlog.get_logger(__name__)
 
@@ -54,6 +55,9 @@ def execute_rules_batch(
         record_id=uuid.UUID(context["record_id"]) if context.get("record_id") else None,
         changed_fields=context.get("changed_fields", []),
     )
+
+    if any(contains_lookup(r.get("conditions")) or contains_lookup(r.get("actions")) for r in rules):
+        rules = _resolve_lookups_for_rules(rules, ctx)
 
     batch = run_rules_batch(rules, ctx)
 
@@ -96,6 +100,46 @@ def _rule_status(outcome: RuleOutcome, persist_error: str | None) -> str:
     if not outcome.result.matched:
         return "skipped"
     return "failed" if outcome.result.errors else "success"
+
+
+def _resolve_lookups_for_rules(rules: list[dict], ctx: ExecutionContext) -> list[dict]:
+    """Resolve every "lookup" node inside each rule's conditions/actions
+    before the pure interpreter runs (see app/engine/lookup.py's module
+    docstring) — e.g. an automation rule that writes a SUM over a related
+    table's rows into a field on another record (ТЗ: "сумма операций по
+    работнику"). Only called when `contains_lookup` found at least one, so
+    the common case (rules with no lookups — the overwhelming majority,
+    e.g. the warehouse balance rules) never pays for this DB round-trip.
+    Same dedicated-NullPool-engine pattern as `_persist_batch`/
+    `_write_execution_logs` — see their docstrings for why the shared
+    app-wide engine isn't safe to reuse across this task's own event loop.
+    """
+    import asyncio
+
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from app.core.config import settings
+    from app.engine.lookup import resolve_rule_lookups
+
+    db_url = str(settings.DATABASE_URL).replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    async def _run() -> list[dict]:
+        run_engine = create_async_engine(db_url, poolclass=NullPool)
+        run_session_factory = async_sessionmaker(
+            bind=run_engine, class_=AsyncSession, expire_on_commit=False, autoflush=False
+        )
+        resolved: list[dict] = []
+        async with run_session_factory() as session:
+            for rule in rules:
+                conditions, actions = await resolve_rule_lookups(
+                    rule.get("conditions") or {}, rule.get("actions") or [], session, ctx
+                )
+                resolved.append({**rule, "conditions": conditions, "actions": actions})
+        await run_engine.dispose()
+        return resolved
+
+    return asyncio.run(_run())
 
 
 def _persist_batch(batch: BatchResult, ctx: ExecutionContext, execution_batch_id: str) -> None:

@@ -478,6 +478,11 @@ def _validate_action_node(node: Any) -> None:
         raise ValueError(f"Invalid action type: {t!r}")
     if t == "set_field" and isinstance(node.get("value"), dict):
         _validate_expr_node(node["value"])
+    if t in ("create_record", "update_record"):
+        for key in ("payload", "match", "increment"):
+            for v in (node.get(key) or {}).values():
+                if isinstance(v, dict):
+                    _validate_expr_node(v)
 
 
 # ------------------------------------------------------------------
