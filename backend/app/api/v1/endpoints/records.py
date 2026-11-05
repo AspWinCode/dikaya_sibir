@@ -180,6 +180,11 @@ async def create_record(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message
         ) from exc
 
+    # Commit BEFORE dispatching the rules batch: the sandbox worker loads the
+    # record by id in its own connection, so it must already be visible there.
+    # Dispatching pre-commit raced the worker against this request's commit and
+    # silently dropped set_field mutations (logged as "success").
+    await db.commit()
     try:
         await RuleService(db).evaluate_rules_for_event(
             app_id,
@@ -352,6 +357,11 @@ async def update_record(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.message
         ) from exc
 
+    # Commit BEFORE dispatching the rules batch: the sandbox worker loads the
+    # record by id in its own connection, so it must already be visible there.
+    # Dispatching pre-commit raced the worker against this request's commit and
+    # silently dropped set_field mutations (logged as "success").
+    await db.commit()
     try:
         await RuleService(db).evaluate_rules_for_event(
             app_id,

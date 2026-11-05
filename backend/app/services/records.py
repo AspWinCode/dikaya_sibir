@@ -555,7 +555,7 @@ class RecordService:
         # Synchronous, pre-commit validation rules (rule_type="validation")
         # get first look — nothing has been written yet, so a block_save
         # raises cleanly with no rollback needed. Unlike automation rules
-        # (async, post-commit — see RuleService.evaluate_rules_for_event).
+        # (async — see RuleService.evaluate_rules_for_event; the endpoints commit first).
         await ValidationRuleService(self._db).run(
             app_id,
             entity_id,
