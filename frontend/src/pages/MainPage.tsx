@@ -229,33 +229,43 @@ export function MainPage() {
   const activeRules    = rules.filter((r) => r.is_active).length;
   const totalFields    = entities.reduce((sum, e) => sum + (e.fields?.length ?? 0), 0);
 
+  const open = (route: string) => () => navigate(effectiveSelected ? `${route}?app=${effectiveSelected}` : route);
   const infoCards: InfoCardData[] = isApps
     ? [
         {
           id: "data",
           label: "Данные",
-          content: entities.length
-            ? `${entities.length} ${pluralTable(entities.length)}${totalFields ? `\n${totalFields} ${pluralField(totalFields)}` : ""}`
-            : "Нет таблиц",
+          content: entities.length ? `${entities.length} ${pluralTable(entities.length)}` : "Нет таблиц",
+          big: String(entities.length),
+          caption: `${pluralTable(entities.length)}${totalFields ? ` · ${totalFields} ${pluralField(totalFields)}` : ""}`,
+          items: entities.filter((e) => !e.is_system).map((e) => ({ text: e.display_name, on: true })),
+          onOpen: open("/schema"),
         },
         {
           id: "interface",
           label: "Интерфейс",
-          content: pages.length
-            ? `Опубликовано ${publishedPages}/${pages.length} стр`
-            : "Нет страниц",
+          content: pages.length ? `Опубликовано ${publishedPages}/${pages.length} стр` : "Нет страниц",
+          big: `${publishedPages}/${pages.length}`,
+          caption: "страниц опубликовано",
+          items: pages.map((p) => ({ text: p.title, on: p.is_published })),
+          onOpen: open("/views"),
         },
         {
           id: "security",
           label: "Безопасность",
           content: "Защита подключена",
+          big: "✓",
+          caption: "Защита подключена",
+          onOpen: open("/security"),
         },
         {
           id: "automation",
           label: "Автоматизация",
-          content: rules.length
-            ? `${activeRules} активных из ${rules.length} правил`
-            : "Нет правил",
+          content: rules.length ? `${activeRules} активных из ${rules.length} правил` : "Нет правил",
+          big: `${activeRules}/${rules.length}`,
+          caption: "правил активно",
+          items: rules.map((r) => ({ text: r.name, on: r.is_active })),
+          onOpen: open("/bot"),
         },
       ]
     : [
