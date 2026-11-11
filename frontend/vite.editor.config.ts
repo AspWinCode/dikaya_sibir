@@ -2,9 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "path";
 
-// Production build for the App Builder (/editor bundle)
+// Production build for the App Builder (served from the site root)
 export default defineConfig({
-  base: "/editor/",
+  base: "/",
   plugins: [react()],
   resolve: {
     alias: {

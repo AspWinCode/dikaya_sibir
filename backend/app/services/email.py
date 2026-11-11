@@ -111,7 +111,7 @@ async def send_invitation_email(
     to: str,
     display_name: str,
     temp_password: str,
-    platform_url: str = "http://localhost:5173/editor",
+    platform_url: str = "http://localhost:5173",
     db: AsyncSession | None = None,
 ) -> bool:
     if db is not None:

@@ -40,8 +40,8 @@ apiClient.interceptors.request.use((config) => {
 });
 
 function redirectToSignin(): void {
-  if (!window.location.pathname.startsWith("/editor/signin")) {
-    window.location.href = "/editor/signin";
+  if (!window.location.pathname.startsWith("/signin")) {
+    window.location.href = "/signin";
   }
 }
 
@@ -76,8 +76,8 @@ apiClient.interceptors.response.use(
     // Temp (invite) password: backend blocks everything until it is changed.
     const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail;
     if (status === 403 && detail === "Password change required") {
-      if (!window.location.pathname.startsWith("/editor/change-password")) {
-        window.location.href = "/editor/change-password";
+      if (!window.location.pathname.startsWith("/change-password")) {
+        window.location.href = "/change-password";
       }
       return Promise.reject(error);
     }

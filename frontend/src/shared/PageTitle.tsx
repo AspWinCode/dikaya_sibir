@@ -32,7 +32,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/modules": "Модули",
   "/themes": "Темы",
   "/account": "Аккаунт",
-  "/editor": "Редактор",
+  "/builder": "Редактор",
   "/preview": "Предпросмотр",
   "/db-history": "История базы данных",
   "/data-page": "Данные",

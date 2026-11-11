@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = ""
 
     # Public frontend URL (used in password-reset emails)
-    FRONTEND_URL: str = "http://localhost:5173/editor"
+    FRONTEND_URL: str = "http://localhost:5173"
 
     @property
     def email_from_header(self) -> str:
@@ -113,12 +113,12 @@ class Settings(BaseSettings):
     # Яндекс ID OAuth 2.0
     YANDEX_CLIENT_ID: str = ""
     YANDEX_CLIENT_SECRET: str = ""
-    YANDEX_REDIRECT_URI: str = "http://localhost:5173/editor/auth/yandex/callback"
+    YANDEX_REDIRECT_URI: str = "http://localhost:5173/auth/yandex/callback"
 
     # VK ID OAuth 2.0
     VK_CLIENT_ID: str = ""
     VK_CLIENT_SECRET: str = ""
-    VK_REDIRECT_URI: str = "http://localhost:5173/editor/auth/vk/callback"
+    VK_REDIRECT_URI: str = "http://localhost:5173/auth/vk/callback"
 
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"

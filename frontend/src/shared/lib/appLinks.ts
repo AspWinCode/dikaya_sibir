@@ -9,15 +9,15 @@ export function buildRuntimeUrl(appId: string | null | undefined, origin: string
 
 /**
  * Build the editor (App Builder) URL for an app:
- * `<origin>/editor/views?app=<id>`.
+ * `<origin>/views?app=<id>`.
  */
 export function buildEditorUrl(appId: string | null | undefined, origin: string): string {
   const base = origin.replace(/\/+$/, "");
-  return appId ? `${base}/editor/views?app=${appId}` : `${base}/editor/`;
+  return appId ? `${base}/views?app=${appId}` : `${base}/`;
 }
 
-/** Build a shareable invite URL: `<origin>/editor/invite/<token>`. */
+/** Build a shareable invite URL: `<origin>/invite/<token>`. */
 export function buildInviteUrl(token: string, origin: string): string {
   const base = origin.replace(/\/+$/, "");
-  return `${base}/editor/invite/${encodeURIComponent(token)}`;
+  return `${base}/invite/${encodeURIComponent(token)}`;
 }

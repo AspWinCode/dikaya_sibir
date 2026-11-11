@@ -1,29 +1,10 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "path";
-import type { Plugin } from "vite";
 
-function redirectRootPlugin(): Plugin {
-  return {
-    name: "redirect-root",
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        // Mirror nginx: bare "/" → "/editor/" so BrowserRouter basename="/editor" works
-        // Skip WebSocket upgrade requests (Vite HMR)
-        if (req.url === "/" && !req.headers.upgrade) {
-          res.writeHead(302, { Location: "/editor/" });
-          res.end();
-          return;
-        }
-        next();
-      });
-    },
-  };
-}
-
-// Dev server — serves both /editor and /runtime via a single dev server
+// Dev server — editor at "/", runtime at "/app/", one dev server
 export default defineConfig({
-  plugins: [react(), redirectRootPlugin()],
+  plugins: [react()],
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),

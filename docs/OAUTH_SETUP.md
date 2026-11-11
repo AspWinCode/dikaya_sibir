@@ -12,8 +12,8 @@
 
 | Сервис | Redirect / Callback URI |
 |---|---|
-| Яндекс ID | `https://platform.lesovik.site/editor/auth/yandex/callback` |
-| VK | `https://platform.lesovik.site/editor/auth/vk/callback` |
+| Яндекс ID | `https://platform.lesovik.site/auth/yandex/callback` |
+| VK | `https://platform.lesovik.site/auth/vk/callback` |
 
 Адрес должен совпадать **символ в символ** (https, без лишнего `/` в конце).
 Базовый домен для VK: `platform.lesovik.site`.
@@ -28,7 +28,7 @@
    - **Название:** «Лесовик» (его увидят пользователи на странице согласия).
    - **Иконка:** логотип платформы (по желанию).
    - **Платформы:** отметьте **«Веб-сервисы»**.
-   - **Callback URI #1:** `https://platform.lesovik.site/editor/auth/yandex/callback`
+   - **Callback URI #1:** `https://platform.lesovik.site/auth/yandex/callback`
    - **Доступы (права):** добавьте **«Доступ к адресу электронной почты» (`login:email`)** и **«Доступ к логину, имени и фамилии, полу» (`login:info`)**.
      Платформа берёт почту пользователя, без `login:email` вход не сработает.
    - **Почта для связи** — рабочая (например, `info@lesovik.site`).
@@ -47,7 +47,7 @@
 2. Создайте приложение (платформа **«Веб»**/«Сайт»):
    - **Название:** «Лесовик».
    - **Базовый домен:** `platform.lesovik.site`.
-   - **Доверенный Redirect URL:** `https://platform.lesovik.site/editor/auth/vk/callback`
+   - **Доверенный Redirect URL:** `https://platform.lesovik.site/auth/vk/callback`
    - **Права (scope):** почта пользователя (`email`).
 3. В настройках приложения скопируйте:
    - **ID приложения** → `VK_CLIENT_ID`;
@@ -75,11 +75,14 @@ nano /opt/lesovik/repo/infra/.env
 ```env
 YANDEX_CLIENT_ID=<ID приложения Яндекса>
 YANDEX_CLIENT_SECRET=<пароль приложения Яндекса>
-YANDEX_REDIRECT_URI=https://platform.lesovik.site/editor/auth/yandex/callback
+YANDEX_REDIRECT_URI=https://platform.lesovik.site/auth/yandex/callback
 
 VK_CLIENT_ID=<ID приложения VK>
 VK_CLIENT_SECRET=<защищённый ключ VK>
-VK_REDIRECT_URI=https://platform.lesovik.site/editor/auth/vk/callback
+VK_REDIRECT_URI=https://platform.lesovik.site/auth/vk/callback
+
+# Базовый адрес платформы (используется в ссылках из писем: сброс пароля, приглашения)
+FRONTEND_URL=https://platform.lesovik.site
 ```
 
 Затем перезапустите бэкенд, чтобы он прочитал новые значения:
@@ -93,7 +96,7 @@ cd /opt/lesovik/repo && docker compose -f infra/docker-compose.server.yml --env-
 
 ## 4. Как проверить
 
-1. В браузере (лучше в окне инкогнито) откройте `https://platform.lesovik.site/editor/signin`.
+1. В браузере (лучше в окне инкогнито) откройте `https://platform.lesovik.site/signin`.
 2. Нажмите **«Яндекс ID»**: должно открыться окно Яндекса с названием «Лесовик», а после согласия вернуть вас в платформу уже авторизованным.
 3. То же для **«VK ID»**.
 4. Новый пользователь создаётся автоматически по почте из аккаунта. Если у VK-пользователя скрыта почта, платформа создаст

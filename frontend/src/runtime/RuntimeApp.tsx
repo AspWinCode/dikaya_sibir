@@ -152,7 +152,7 @@ function RuntimeShell() {
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
           <span>Чтобы открыть приложение, войдите в систему.</span>
           <a
-            href="/editor/signin"
+            href="/signin"
             style={{ background: "#35A7FF", color: "#fff", padding: "10px 24px", borderRadius: 8, textDecoration: "none", fontWeight: 500 }}
           >
             Войти

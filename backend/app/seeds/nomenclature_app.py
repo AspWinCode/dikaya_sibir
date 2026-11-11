@@ -283,7 +283,7 @@ async def run() -> None:
         await db.commit()
         log.info("nomenclature_app_seeded", app_id=str(app.id), pages=len(pages))
         print(f"\n✅ Приложение создано! ID: {app.id}")
-        print("   Откройте: http://155.212.164.251:8090/editor\n")
+        print("   Откройте: https://platform.lesovik.site\n")
 
 
 if __name__ == "__main__":

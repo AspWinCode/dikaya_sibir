@@ -1509,7 +1509,7 @@ export const handlers = [
           { name: "display_name", type: "string", description: "Имя пользователя", example: "Иван Иванов" },
           { name: "email", type: "string", description: "Email", example: "user@example.com" },
           { name: "temp_password", type: "string", description: "Временный пароль", example: "TmpPass123" },
-          { name: "platform_url", type: "string", description: "Ссылка на платформу", example: "https://example.com/editor" },
+          { name: "platform_url", type: "string", description: "Ссылка на платформу", example: "https://example.com" },
         ],
       ),
       mkTpl(

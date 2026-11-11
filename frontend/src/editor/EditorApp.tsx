@@ -60,7 +60,7 @@ export function EditorApp() {
   }, [theme]);
 
   return (
-    <BrowserRouter basename="/editor">
+    <BrowserRouter>
       <PageTitle />
       <StatusBanner />
       <IdleWarningModal />
@@ -103,7 +103,7 @@ export function EditorApp() {
         <Route path="/modules"   element={<RequireAuth><ScaleToFit><ModulesPage /></ScaleToFit></RequireAuth>} />
         <Route path="/themes"    element={<RequireAuth><ScaleToFit><ThemesPage /></ScaleToFit></RequireAuth>} />
         <Route path="/account"    element={<RequireAuth><ScaleToFit><AccountPage /></ScaleToFit></RequireAuth>} />
-        <Route path="/editor"     element={<RequireAuth><ScaleToFit><EditorPage /></ScaleToFit></RequireAuth>} />
+        <Route path="/builder"    element={<RequireAuth><ScaleToFit><EditorPage /></ScaleToFit></RequireAuth>} />
         <Route path="/preview"    element={<RequireAuth><ScaleToFit><PreviewPage /></ScaleToFit></RequireAuth>} />
         <Route path="/db-history" element={<RequireAuth><ScaleToFit><DbHistoryPage /></ScaleToFit></RequireAuth>} />
         <Route path="/data-page"  element={<RequireAuth><ScaleToFit><DataPage /></ScaleToFit></RequireAuth>} />

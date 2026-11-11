@@ -10,7 +10,7 @@ describe("appLinks", () => {
 
   it("builds an editor URL with the app id", () => {
     expect(buildEditorUrl("a1", "https://oi.example:8090")).toBe(
-      "https://oi.example:8090/editor/views?app=a1",
+      "https://oi.example:8090/views?app=a1",
     );
   });
 
@@ -20,6 +20,6 @@ describe("appLinks", () => {
 
   it("falls back to the root when no app id", () => {
     expect(buildRuntimeUrl(null, "http://host")).toBe("http://host/app/");
-    expect(buildEditorUrl(undefined, "http://host")).toBe("http://host/editor/");
+    expect(buildEditorUrl(undefined, "http://host")).toBe("http://host/");
   });
 });

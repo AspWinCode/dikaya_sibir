@@ -27,7 +27,7 @@
 3. Заполните:
    - **Название:** `Лесовик`
    - **Платформа:** отметьте **«Веб-сервисы»**
-   - **Callback URI:** `https://platform.lesovik.site/editor/auth/yandex/callback`
+   - **Callback URI:** `https://platform.lesovik.site/auth/yandex/callback`
    - **Права доступа:** добавьте
      - «Доступ к адресу электронной почты» (`login:email`)
      - «Доступ к логину, имени и фамилии, полу» (`login:info`)
@@ -44,7 +44,7 @@
 2. Создайте новое приложение, платформа **«Веб»**:
    - **Название:** `Лесовик`
    - **Базовый домен:** `platform.lesovik.site`
-   - **Доверенный Redirect URL:** `https://platform.lesovik.site/editor/auth/vk/callback`
+   - **Доверенный Redirect URL:** `https://platform.lesovik.site/auth/vk/callback`
    - **Доступ к почте:** включите (`email`)
    - Загрузите логотип, укажите ссылки на политику конфиденциальности и пользовательское соглашение, если они запрашиваются.
 3. Сохраните два значения: **ID приложения** и **Защищённый ключ** (секрет).
