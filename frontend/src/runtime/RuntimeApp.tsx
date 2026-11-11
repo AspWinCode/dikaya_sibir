@@ -674,7 +674,7 @@ function PageView({ page, appId, entities, relations, allPages, accent, colors, 
         </div>
       )}
       {visibleBlocks.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: blockGap, marginTop: hasDataView ? blockGap : 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: blockGap, marginTop: hasDataView ? blockGap : 0, ["--block-gap" as string]: `${blockGap}px` }}>
           {blockRows.map((row) => {
             const items = row.map((b) => (
               <Block
@@ -705,7 +705,7 @@ function PageView({ page, appId, entities, relations, allPages, accent, colors, 
             ));
             if (row.length === 1) return items[0];
             return (
-              <div key={row.map((b) => b.id).join("-")} style={{ display: "flex", flexWrap: "wrap", gap: blockGap }}>
+              <div key={row.map((b) => b.id).join("-")} style={{ display: "flex", flexWrap: "wrap", gap: blockGap, ["--block-gap" as string]: `${blockGap}px` }}>
                 {items}
               </div>
             );
@@ -1570,7 +1570,16 @@ function TableBlock({ appId, entities, relations, title, entityId, visibleSystem
   );
 }
 
-const BLOCK_WIDTH_MAP: Record<string, string> = { full: "100%", half: "50%", third: "33.333%", auto: "auto" };
+// ½ / ⅓ must leave room for the flex `gap` between siblings, otherwise
+// 2×50% (or 3×33.333%) + gaps overflows the row and the last block wraps —
+// "½ doesn't put two side by side, ⅓ doesn't put three". The row container
+// exposes its gap as --block-gap (fallback 0px for a lone block).
+const BLOCK_WIDTH_MAP: Record<string, string> = {
+  full: "100%",
+  half: "calc((100% - var(--block-gap, 0px)) / 2)",
+  third: "calc((100% - 2 * var(--block-gap, 0px)) / 3)",
+  auto: "auto",
+};
 
 /** Resolved CSS width for a block's "Ширина" setting ("full" if unset). */
 function resolveBlockWidth(block: PageBlock): string {
