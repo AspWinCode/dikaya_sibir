@@ -27,7 +27,7 @@ const items: { id: RailModule; label: string; icon: React.ReactNode }[] = [
   { id: "constructor",   label: "Конструктор",    icon: <ConstructorIcon /> },
   { id: "automation",    label: "Автоматизация",  icon: <RobotIcon /> },
   { id: "notifications", label: "Уведомления",    icon: <BellIcon /> },
-  { id: "documents",     label: "Документы",      icon: <DocumentIcon /> },
+  { id: "documents",     label: "Публикация",      icon: <DocumentIcon /> },
   { id: "security",      label: "Безопасность",   icon: <ShieldIcon /> },
   { id: "docs",          label: "Документация",   icon: <BookIcon /> },
 ];

@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
@@ -665,9 +666,18 @@ export function ViewEditorPage() {
                   : "border-cta text-cta hover:bg-[#EBF4FF]",
               )}
             >
-              {(activePage as { is_published?: boolean }).is_published ? "Опубликовано" : "Опубликовать"}
+              {(activePage as { is_published?: boolean }).is_published ? "Страница опубликована" : "Опубликовать страницу"}
             </button>
           )}
+          {/* The button above publishes ONE page. Publishing the whole app
+              lives on the Deploy screen — link to it from here so it can be
+              found where people look for "Опубликовать". */}
+          <Link
+            to={appId ? `/deploy?app=${appId}` : "/deploy"}
+            className="flex items-center justify-center gap-[8px] px-3 py-[5px] rounded-[20px] text-meta font-semibold transition-colors h-full border-2 border-cta bg-cta text-white hover:opacity-90 whitespace-nowrap"
+          >
+            Опубликовать приложение
+          </Link>
         </div>
       </div>
 
