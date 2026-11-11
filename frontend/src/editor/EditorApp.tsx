@@ -14,6 +14,7 @@ import { ChangePasswordRequiredPage } from "@/pages/ChangePasswordRequiredPage";
 import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
 import { ResetPasswordPage } from "@/pages/ResetPasswordPage";
 import { AdminPage } from "@/pages/AdminPage";
+import { PageTitle, RedirectKeepSearch } from "@/shared/PageTitle";
 import { ViewEditorPage } from "@/pages/ViewEditorPage";
 import { DataSourcesPage } from "@/pages/DataSourcesPage";
 import { ActionsPage } from "@/pages/ActionsPage";
@@ -60,12 +61,20 @@ export function EditorApp() {
 
   return (
     <BrowserRouter basename="/editor">
+      <PageTitle />
       <StatusBanner />
       <IdleWarningModal />
       <Routes>
         {/* Public */}
         <Route path="/landing" element={<LandingPage />} />
         <Route path="/signin" element={<SignInPage />} />
+        {/* Common spellings (and a frequent typo) of the sign-in / sign-up URLs */}
+        {["/login", "/log-in", "/sign-in", "/singin"].map((p) => (
+          <Route key={p} path={p} element={<RedirectKeepSearch to="/signin" />} />
+        ))}
+        {["/register", "/sign-up"].map((p) => (
+          <Route key={p} path={p} element={<RedirectKeepSearch to="/signup" />} />
+        ))}
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/invite/:token" element={<InvitePage />} />
         <Route path="/change-password" element={<ChangePasswordRequiredPage />} />
