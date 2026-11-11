@@ -3400,10 +3400,12 @@ function DataView({ viewType, entity, cols, records, accent, colors, columnWidth
 
     return (
       <section style={{ border: `1px solid ${colors.border}`, borderRadius: 10, overflow: "hidden", background: colors.surface }}>
-        <div style={{ padding: "10px 14px", background: colors.bg, fontWeight: 600, fontSize: 15, display: "flex", justifyContent: "space-between", alignItems: "center", color: colors.text }}>
-          <span>{title}</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ position: "relative" }}>
+        {/* Header wraps on narrow screens: a fixed 160px search + the counter
+            used to squeeze the title until it overlapped the search box. */}
+        <div style={{ padding: "10px 14px", background: colors.bg, fontWeight: 600, fontSize: 15, display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, color: colors.text }}>
+          <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{title}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "1 1 180px", justifyContent: "flex-end", minWidth: 0 }}>
+            <div style={{ position: "relative", flex: "1 1 100px", minWidth: 100, maxWidth: 200 }}>
               <input
                 value={filterText}
                 onChange={(e) => setFilterText(e.target.value)}
@@ -3412,7 +3414,7 @@ function DataView({ viewType, entity, cols, records, accent, colors, columnWidth
                   height: 28, paddingLeft: 28, paddingRight: 8, fontSize: 12,
                   border: `1px solid ${colors.border}`, borderRadius: 6,
                   background: colors.surface, color: colors.text, outline: "none",
-                  width: 160,
+                  width: "100%", boxSizing: "border-box",
                 }}
               />
               <svg viewBox="0 0 16 16" fill="none" stroke={colors.textMuted} strokeWidth="1.6"
@@ -3420,7 +3422,7 @@ function DataView({ viewType, entity, cols, records, accent, colors, columnWidth
                 <circle cx="6.5" cy="6.5" r="4" /><path d="M10.5 10.5l3 3" strokeLinecap="round" />
               </svg>
             </div>
-            <span style={{ color: colors.textMuted, fontWeight: 400, fontSize: 12 }}>
+            <span style={{ color: colors.textMuted, fontWeight: 400, fontSize: 12, whiteSpace: "nowrap", flexShrink: 0 }}>
               {sorted.length}{filterText ? `/${records.length}` : ""} записей
             </span>
           </div>
