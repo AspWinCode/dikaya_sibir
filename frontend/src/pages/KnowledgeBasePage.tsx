@@ -17,7 +17,14 @@ export function KnowledgeBasePage() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string | null>(null);
   const [selectedSlug, setSelectedSlug] = useState<string | null>(searchParams.get("article"));
-  const [mode, setMode] = useState<"view" | "create" | "edit">("view");
+  // Deep links from the admin panel / Learning screen:
+  //   ?new=1&category=Обучение   -> open the editor for a new article in that category
+  //   ?article=<slug>&edit=1     -> open that article straight in the editor
+  const initialMode: "view" | "create" | "edit" =
+    isAdmin && searchParams.get("new") ? "create"
+    : isAdmin && searchParams.get("edit") && searchParams.get("article") ? "edit"
+    : "view";
+  const [mode, setMode] = useState<"view" | "create" | "edit">(initialMode);
 
   const articlesQ = useArticles({ category: category ?? undefined, q: search || undefined });
   const categoriesQ = useCategories();
@@ -97,6 +104,7 @@ export function KnowledgeBasePage() {
         {mode === "create" && (
           <ArticleEditor
             isAdmin={isAdmin}
+            initialCategory={searchParams.get("category") ?? undefined}
             onDone={(slug) => { setSelectedSlug(slug); setMode("view"); }}
             onCancel={() => setMode("view")}
           />
@@ -237,9 +245,9 @@ function ArticleDetail({
 
 /* ── Article editor (create / edit) ── */
 function ArticleEditor({
-  isAdmin, existingSlug, onDone, onCancel,
+  isAdmin, existingSlug, initialCategory, onDone, onCancel,
 }: {
-  isAdmin: boolean; existingSlug?: string; onDone: (slug: string) => void; onCancel: () => void;
+  isAdmin: boolean; existingSlug?: string; initialCategory?: string; onDone: (slug: string) => void; onCancel: () => void;
 }) {
   const existingQ = useArticle(existingSlug);
   const createMut = useCreateArticle();
@@ -249,7 +257,7 @@ function ArticleEditor({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState(existingQ.data?.title ?? "");
-  const [category, setCategoryField] = useState(existingQ.data?.category ?? "");
+  const [category, setCategoryField] = useState(existingQ.data?.category ?? initialCategory ?? "");
   const [displayOrder, setDisplayOrder] = useState(existingQ.data?.display_order ?? 0);
   const [content, setContent] = useState(existingQ.data?.content ?? "");
   const [isPublished, setIsPublished] = useState(existingQ.data?.is_published ?? true);
@@ -329,9 +337,15 @@ function ArticleEditor({
             <input
               value={category}
               onChange={(e) => setCategoryField(e.target.value)}
-              placeholder="Например: Правила, Импорт, Безопасность"
+              list="kb-category-suggestions"
+              placeholder="Например: Обучение, Следующие шаги, Правила"
               className="w-full h-[38px] px-3 rounded-[8px] border border-cardbg text-[14px] outline-none focus:border-cta"
             />
+            {/* The Learning screen only shows these two exact category names. */}
+            <datalist id="kb-category-suggestions">
+              <option value="Обучение" />
+              <option value="Следующие шаги" />
+            </datalist>
           </div>
           <div className="w-[140px]">
             <label className="text-[13px] font-medium text-primary block mb-1.5">Порядок</label>

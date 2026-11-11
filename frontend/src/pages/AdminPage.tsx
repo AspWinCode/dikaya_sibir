@@ -12,9 +12,10 @@ import { useAuthStore } from "@/shared/auth/store";
 import { useAllSessions, useTerminateSession, useTerminateUserSessions } from "@/shared/hooks/useSessions";
 import { useAllRoles, useCreateRole, useDeleteRole } from "@/shared/hooks/useRbac";
 import { EmailTemplatesContent } from "@/pages/EmailTemplatesPage";
+import { AdminLearning } from "@/pages/AdminLearning";
 
 /* ── Types ── */
-type AdminSection = "home" | "orgs" | "logs" | "users" | "groups" | "roles" | "apps" | "databases" | "sessions" | "notifications";
+type AdminSection = "home" | "orgs" | "logs" | "users" | "groups" | "roles" | "apps" | "databases" | "sessions" | "notifications" | "learning";
 
 const ALL_ADMIN_ITEMS: { id: AdminSection; label: string; icon: React.ReactNode; platformOnly?: boolean }[] = [
   { id: "home",      label: "Главная",        icon: <HomeIcon /> },
@@ -26,6 +27,7 @@ const ALL_ADMIN_ITEMS: { id: AdminSection; label: string; icon: React.ReactNode;
   { id: "databases", label: "Базы данных",    icon: <DbIcon />, platformOnly: true },
   { id: "sessions",       label: "Сессии",          icon: <SessionsNavIcon /> },
   { id: "notifications",  label: "Email-шаблоны",   icon: <NotifNavIcon /> },
+  { id: "learning",       label: "Обучение",        icon: <LearningNavIcon />, platformOnly: true },
   { id: "logs",           label: "Журнал аудита",   icon: <LogsIcon /> },
 ];
 
@@ -1962,6 +1964,7 @@ export function AdminPage() {
     databases:     <AdminDatabases />,
     sessions:      <AdminSessions />,
     notifications: <EmailTemplatesContent className="h-[920px]" />,
+    learning:      <AdminLearning />,
   };
 
   return (
@@ -2306,6 +2309,14 @@ function SessionsNavIcon() {
       <path d="M3 10h19" stroke="#00205F" strokeWidth="1.5"/>
       <circle cx="7" cy="15" r="1.5" fill="#00205F"/>
       <circle cx="12.5" cy="15" r="1.5" fill="#00205F"/>
+    </svg>
+  );
+}
+
+function LearningNavIcon() {
+  return (
+    <svg viewBox="0 0 25 25" fill="none" className="w-full h-full">
+      <path d="M4 5.5C4 4.7 4.7 4 5.5 4H12v16H5.5C4.7 20 4 19.3 4 18.5v-13zM21 5.5c0-.8-.7-1.5-1.5-1.5H13v16h6.5c.8 0 1.5-.7 1.5-1.5v-13z" stroke="#00205F" strokeWidth="2" strokeLinejoin="round"/>
     </svg>
   );
 }

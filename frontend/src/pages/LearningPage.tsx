@@ -5,9 +5,8 @@ import { IconRail, type RailModule } from "@/components/layout/IconRail";
 import { PreviewPanel } from "@/components/layout/PreviewPanel";
 import { useAuthStore } from "@/shared/auth/store";
 import { useArticles } from "@/shared/hooks/useKnowledge";
+import { LEARNING_CATEGORY, NEXT_STEPS_CATEGORY } from "@/pages/AdminLearning";
 
-const LEARNING_CATEGORY = "Обучение";
-const NEXT_STEPS_CATEGORY = "Следующие шаги";
 
 export function LearningPage() {
   const isPlatformAdmin = useAuthStore((s) => s.user?.roles.some((r) => r.id === "platform_admin") ?? false);
@@ -39,7 +38,7 @@ export function LearningPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-[18px] font-semibold text-primary">Предлагаемые следующие шаги</h2>
               {isPlatformAdmin && (
-                <Link to="/knowledge-base" className="text-[13px] font-medium text-cta hover:underline">
+                <Link to={`/knowledge-base?new=1&category=${encodeURIComponent(NEXT_STEPS_CATEGORY)}`} className="text-[13px] font-medium text-cta hover:underline">
                   + Добавить шаг
                 </Link>
               )}
@@ -119,7 +118,7 @@ export function LearningPage() {
               <h2 className="text-[18px] font-semibold text-primary">Обучающие материалы</h2>
               {isPlatformAdmin && (
                 <Link
-                  to="/knowledge-base"
+                  to={`/knowledge-base?new=1&category=${encodeURIComponent(LEARNING_CATEGORY)}`}
                   className="text-[13px] font-medium text-cta hover:underline"
                 >
                   + Добавить материал
