@@ -10,6 +10,21 @@ import { useEntityRules, useCreateRule, useUpdateRule, useDeleteRule, useTestRul
 import type { EntityRead, FieldRead } from "@/shared/api/entities";
 import type { Rule, RuleTrigger, RuleTestResponse, RuleExecutionLogRead, RuleConflictLogRead } from "@/shared/api/rules";
 
+/* <option>s for a field picker. A <select> whose value matches no <option>
+   silently DISPLAYS its first option while the stored value stays unchanged,
+   so a rule bound to a renamed/removed field (e.g. stale key `nazvanie` after
+   the field became «Сумма» / `summa`) looked correctly configured but wrote
+   into a field that no longer exists. Surface that case explicitly. */
+function fieldOptions(fields: { id: string; name: string; display_name: string }[], current: string) {
+  const missing = !!current && fields.length > 0 && !fields.some((f) => f.name === current);
+  return (
+    <>
+      {missing && <option value={current}>{`⚠ Поле не найдено: ${current}`}</option>}
+      {fields.map((f) => <option key={f.id} value={f.name}>{f.display_name}</option>)}
+    </>
+  );
+}
+
 function uid() { return Math.random().toString(36).slice(2); }
 
 /* ── Condition / Action row types (UI only) ──
@@ -692,7 +707,7 @@ function RuleModal({
                     onChange={(e) => patchCond(c.id, { field: e.target.value })}
                     className="h-[34px] flex-1 border border-cardbg rounded-[8px] px-2 text-[13px] bg-white focus:outline-none focus:border-cta"
                   >
-                    {userFields.map((f) => <option key={f.id} value={f.name}>{f.display_name}</option>)}
+                    {fieldOptions(userFields, c.field)}
                   </select>
                   <select
                     value={c.op}
@@ -766,7 +781,7 @@ function RuleModal({
                           onChange={(e) => patchAction(a.id, { field: e.target.value })}
                           className="h-[34px] flex-1 border border-cardbg rounded-[8px] px-2 text-[13px] bg-white focus:outline-none focus:border-cta"
                         >
-                          {userFields.map((f) => <option key={f.id} value={f.name}>{f.display_name}</option>)}
+                          {fieldOptions(userFields, a.field)}
                         </select>
                         <input
                           value={a.value}
@@ -806,7 +821,7 @@ function RuleModal({
                                 disabled={!targetEntity}
                               >
                                 <option value="">— выберите поле —</option>
-                                {targetFields.map((f) => <option key={f.id} value={f.name}>{f.display_name}</option>)}
+                                {fieldOptions(targetFields, a.field)}
                               </select>
                             </div>
                           )}
@@ -839,7 +854,7 @@ function RuleModal({
                                   className="h-[34px] flex-1 border border-cardbg rounded-[8px] px-2 text-[13px] bg-white focus:outline-none focus:border-cta"
                                 >
                                   <option value="">— поле текущей записи —</option>
-                                  {userFields.map((f) => <option key={f.id} value={f.name}>{f.display_name}</option>)}
+                                  {fieldOptions(userFields, a.value)}
                                 </select>
                               )}
                             </div>
@@ -873,7 +888,7 @@ function RuleModal({
                               className="h-[34px] flex-1 border border-cardbg rounded-[8px] px-2 text-[13px] bg-white focus:outline-none focus:border-cta"
                             >
                               <option value="">— поле с email —</option>
-                              {userFields.map((f) => <option key={f.id} value={f.name}>{f.display_name}</option>)}
+                              {fieldOptions(userFields, a.notifyTo)}
                             </select>
                           ) : (
                             <input
@@ -1089,7 +1104,7 @@ function AutofillModal({ rule, entityId, fields, appId, onClose }: {
                   className="flex-1 h-[38px] border border-cardbg rounded-[8px] px-3 text-[14px] text-primary focus:outline-none focus:border-cta bg-white"
                 >
                   <option value="">— выберите поле —</option>
-                  {userFields.map((f) => <option key={f.id} value={f.name}>{f.display_name}</option>)}
+                  {fieldOptions(userFields, watchField)}
                 </select>
               )}
             </div>
@@ -1116,7 +1131,7 @@ function AutofillModal({ rule, entityId, fields, appId, onClose }: {
                   className="flex-1 h-[34px] border border-cardbg rounded-[6px] px-2 text-[13px] text-primary bg-white focus:outline-none"
                 >
                   <option value="">— поле —</option>
-                  {userFields.map((f) => <option key={f.id} value={f.name}>{f.display_name}</option>)}
+                  {fieldOptions(userFields, condField)}
                 </select>
                 <select
                   value={condOp}
@@ -1148,7 +1163,7 @@ function AutofillModal({ rule, entityId, fields, appId, onClose }: {
                     onChange={(e) => patchFill(f.id, { targetField: e.target.value })}
                     className="flex-1 h-[34px] border border-cardbg rounded-[6px] px-2 text-[13px] text-primary bg-white focus:outline-none"
                   >
-                    {userFields.map((uf) => <option key={uf.id} value={uf.name}>{uf.display_name}</option>)}
+                    {fieldOptions(userFields, f.targetField)}
                   </select>
                   <span className="text-[13px] text-primary/40 shrink-0 font-mono">=</span>
                   <select
@@ -1173,7 +1188,7 @@ function AutofillModal({ rule, entityId, fields, appId, onClose }: {
                       className="flex-1 h-[34px] border border-cardbg rounded-[6px] px-2 text-[13px] text-primary bg-white focus:outline-none"
                     >
                       <option value="">— поле-источник —</option>
-                      {userFields.map((uf) => <option key={uf.id} value={uf.name}>{uf.display_name}</option>)}
+                      {fieldOptions(userFields, f.sourceValue)}
                     </select>
                   )}
                   {fills.length > 1 && (
