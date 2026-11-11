@@ -9,6 +9,29 @@ export const apiClient = axios.create({
   withCredentials: true,
 });
 
+/** Thrown instead of sending a request whose URL has an empty path segment.
+ * Pages build URLs like `/apps/${appId ?? ""}/entities`; while no app is
+ * resolved (empty/failed apps list, not loaded yet) that became
+ * `/apps//entities` and produced a pointless 404 with no explanation
+ * (seen in prod logs: 12 such POSTs in 5 s). Fail fast with a readable
+ * message instead. */
+export const MISSING_ID_CODE = "ERR_MISSING_ID";
+export const MISSING_ID_MESSAGE =
+  "Приложение не выбрано. Обновите страницу или выберите приложение в списке.";
+
+function hasEmptySegment(url: string | undefined): boolean {
+  if (!url) return false;
+  const path = url.split("?")[0].replace(/^[a-z]+:\/\//i, "");
+  return path.includes("//");
+}
+
+apiClient.interceptors.request.use((config) => {
+  if (hasEmptySegment(config.url)) {
+    return Promise.reject(new axios.AxiosError(MISSING_ID_MESSAGE, MISSING_ID_CODE, config));
+  }
+  return config;
+});
+
 // Attach JWT from storage on every request
 apiClient.interceptors.request.use((config) => {
   const token = getAccessToken();

@@ -115,3 +115,20 @@ describe("apiClient auto-refresh", () => {
     expect(postSpy).not.toHaveBeenCalled();
   });
 });
+
+
+describe("apiClient empty id guard", () => {
+  it("rejects a request with an empty path segment without sending it", async () => {
+    const adapter = vi.fn() as unknown as AxiosAdapter;
+    await expect(apiClient.post("/apps//entities", {}, { adapter })).rejects.toMatchObject({
+      code: "ERR_MISSING_ID",
+    });
+    expect(adapter).not.toHaveBeenCalled();
+  });
+
+  it("lets a normal URL through", async () => {
+    const adapter: AxiosAdapter = (config) =>
+      Promise.resolve({ data: {}, status: 200, statusText: "OK", headers: {}, config });
+    await expect(apiClient.get("/apps/abc/entities", { adapter })).resolves.toMatchObject({ status: 200 });
+  });
+});
