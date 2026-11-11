@@ -81,3 +81,32 @@ describe("RequireAuth — platform_admin landing redirect", () => {
     expect(screen.getByText("ViewEditor")).toBeInTheDocument();
   });
 });
+
+describe("RequireAuth — roles guard", () => {
+  function renderAdmin() {
+    return render(
+      <MemoryRouter initialEntries={["/admin"]}>
+        <Routes>
+          <Route path="/" element={<RequireAuth><div>MainPage</div></RequireAuth>} />
+          <Route
+            path="/admin"
+            element={<RequireAuth roles={["platform_admin", "org_admin"]}><div>AdminDashboard</div></RequireAuth>}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+  }
+
+  it("sends an app editor away from a roles-restricted page", () => {
+    setAuthed({ ...BASE_USER, roles: [{ id: "app_editor", display_name: "Editor" }] });
+    renderAdmin();
+    expect(screen.getByText("MainPage")).toBeTruthy();
+    expect(screen.queryByText("AdminDashboard")).toBeNull();
+  });
+
+  it("lets a user with an allowed role in", () => {
+    setAuthed({ ...BASE_USER, roles: [{ id: "org_admin", display_name: "Org admin" }] });
+    renderAdmin();
+    expect(screen.getByText("AdminDashboard")).toBeTruthy();
+  });
+});

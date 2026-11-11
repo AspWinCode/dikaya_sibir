@@ -3,13 +3,23 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "./store";
 
 /** Gate private routes: redirect to /signin when there is no valid session. */
-export function RequireAuth({ children }: { children: ReactNode }) {
+export function RequireAuth({
+  children,
+  roles,
+}: {
+  children: ReactNode;
+  /** If set, the user must hold at least one of these roles; otherwise they
+   * are sent back to "/". Backend still enforces access — this just stops the
+   * UI shell of a restricted page opening for an account that can't use it. */
+  roles?: string[];
+}) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const initializing = useAuthStore((s) => s.initializing);
   const mustChangePassword = useAuthStore((s) => s.user?.must_change_password ?? false);
   const isPlatformAdmin = useAuthStore(
     (s) => s.user?.roles.some((r) => r.id === "platform_admin") ?? false
   );
+  const userRoleIds = useAuthStore((s) => s.user?.roles.map((r) => r.id).join(",") ?? "");
   const location = useLocation();
 
   if (initializing) {
@@ -26,6 +36,10 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   if (mustChangePassword) {
     return <Navigate to="/change-password" replace />;
+  }
+
+  if (roles && !roles.some((r) => userRoleIds.split(",").includes(r))) {
+    return <Navigate to="/" replace />;
   }
 
   // platform_admin's landing page is the platform admin dashboard, not the

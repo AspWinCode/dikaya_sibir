@@ -41,6 +41,9 @@ import { OAuthCallbackPage } from "@/pages/OAuthCallbackPage";
 import { KnowledgeBasePage } from "@/pages/KnowledgeBasePage";
 import { DocumentRegistrarPage } from "@/pages/DocumentRegistrarPage";
 
+/** Roles the backend lets into the admin dashboard (roles/users/audit endpoints). */
+const ADMIN_ROLES = ["platform_admin", "org_admin", "auditor"];
+
 export function EditorApp() {
   const bootstrap = useAuthStore((s) => s.bootstrap);
   const theme = useThemeStore((s) => s.theme);
@@ -73,7 +76,7 @@ export function EditorApp() {
 
         {/* Private */}
         <Route path="/"        element={<RequireAuth><ScaleToFit><MainPage /></ScaleToFit></RequireAuth>} />
-        <Route path="/admin"   element={<RequireAuth><ScaleToFit><AdminPage /></ScaleToFit></RequireAuth>} />
+        <Route path="/admin"   element={<RequireAuth roles={ADMIN_ROLES}><ScaleToFit><AdminPage /></ScaleToFit></RequireAuth>} />
         <Route path="/views"   element={<RequireAuth><ScaleToFit><ViewEditorPage /></ScaleToFit></RequireAuth>} />
         <Route path="/data"    element={<RequireAuth><ScaleToFit><DataSourcesPage /></ScaleToFit></RequireAuth>} />
         <Route path="/actions" element={<RequireAuth><ScaleToFit><ActionsPage /></ScaleToFit></RequireAuth>} />
