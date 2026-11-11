@@ -21,7 +21,7 @@ async def send_email(
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = settings.EMAIL_FROM
+    msg["From"] = settings.email_from_header
     msg["To"] = to
 
     if body_text:

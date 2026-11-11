@@ -103,7 +103,7 @@ def send_email(
     from app.core.config import settings
 
     msg = MIMEMultipart("alternative")
-    msg["From"] = settings.EMAIL_FROM
+    msg["From"] = settings.email_from_header
     msg["To"] = to
     msg["Subject"] = subject
     if body_text:

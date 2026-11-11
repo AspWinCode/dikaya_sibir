@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_TLS: bool = False
     EMAIL_FROM: str = "noreply@nocode.local"
+    # Display name shown next to EMAIL_FROM ("Лесовик <noreply@…>"). Empty = bare address.
+    EMAIL_FROM_NAME: str = "Лесовик"
 
     # Seed (development bootstrap admin)
     SEED_ADMIN_EMAIL: str = (
@@ -76,6 +78,13 @@ class Settings(BaseSettings):
 
     # Public frontend URL (used in password-reset emails)
     FRONTEND_URL: str = "http://localhost:5173/editor"
+
+    @property
+    def email_from_header(self) -> str:
+        """RFC 5322 From value: "Лесовик <noreply@…>" (name RFC 2047-encoded)."""
+        from email.utils import formataddr
+
+        return formataddr((self.EMAIL_FROM_NAME, self.EMAIL_FROM)) if self.EMAIL_FROM_NAME else self.EMAIL_FROM
 
     @property
     def cors_origins_list(self) -> list[str]:
