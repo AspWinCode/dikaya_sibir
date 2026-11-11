@@ -37,4 +37,10 @@ describe("InfoCard", () => {
     fireEvent.click(screen.getByRole("button"));
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
+
+  it("shows the card's icon instead of the ⋮ menu when one is given", () => {
+    render(<InfoCard card={{ id: "d", label: "Данные", content: "x", icon: <svg data-testid="card-icon" /> }} />);
+    expect(screen.getByTestId("card-icon")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
 });

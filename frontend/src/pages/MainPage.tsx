@@ -8,6 +8,7 @@ import { PreviewPanel } from "@/components/layout/PreviewPanel";
 import { TabSwitcher } from "@/components/ui/TabSwitcher";
 import { ProjectCard, CreateProjectCard, type Project } from "@/components/ui/ProjectCard";
 import { InfoCard, type InfoCardData } from "@/components/ui/InfoCard";
+import { AutomationCardIcon, DataCardIcon, InterfaceCardIcon, SecurityCardIcon } from "@/components/ui/InfoCardIcons";
 import {
   CreateProjectModal,
   NewAppModal,
@@ -234,6 +235,7 @@ export function MainPage() {
     ? [
         {
           id: "data",
+          icon: <DataCardIcon />,
           label: "Данные",
           content: entities.length ? `${entities.length} ${pluralTable(entities.length)}` : "Нет таблиц",
           big: String(entities.length),
@@ -243,6 +245,7 @@ export function MainPage() {
         },
         {
           id: "interface",
+          icon: <InterfaceCardIcon />,
           label: "Интерфейс",
           content: pages.length ? `Опубликовано ${publishedPages}/${pages.length} стр` : "Нет страниц",
           big: `${publishedPages}/${pages.length}`,
@@ -252,6 +255,7 @@ export function MainPage() {
         },
         {
           id: "security",
+          icon: <SecurityCardIcon />,
           label: "Безопасность",
           content: "Защита подключена",
           big: "✓",
@@ -260,6 +264,7 @@ export function MainPage() {
         },
         {
           id: "automation",
+          icon: <AutomationCardIcon />,
           label: "Автоматизация",
           content: rules.length ? `${activeRules} активных из ${rules.length} правил` : "Нет правил",
           big: `${activeRules}/${rules.length}`,
@@ -269,10 +274,10 @@ export function MainPage() {
         },
       ]
     : [
-        { id: "t1", label: "Данные",        content: entities.length ? `${entities.length} ${pluralTable(entities.length)}` : "Нет таблиц" },
-        { id: "t2", label: "Интерфейс",     content: pages.length    ? `${pages.length} страниц` : "Нет страниц" },
-        { id: "t3", label: "Безопасность",  content: "Защита подключена" },
-        { id: "t4", label: "Автоматизация", content: rules.length    ? `${rules.length} правил` : "Нет правил" },
+        { id: "t1", icon: <DataCardIcon />, label: "Данные",        content: entities.length ? `${entities.length} ${pluralTable(entities.length)}` : "Нет таблиц" },
+        { id: "t2", icon: <InterfaceCardIcon />, label: "Интерфейс",     content: pages.length    ? `${pages.length} страниц` : "Нет страниц" },
+        { id: "t3", icon: <SecurityCardIcon />, label: "Безопасность",  content: "Защита подключена" },
+        { id: "t4", icon: <AutomationCardIcon />, label: "Автоматизация", content: rules.length    ? `${rules.length} правил` : "Нет правил" },
       ];
 
   return (
