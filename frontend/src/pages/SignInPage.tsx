@@ -31,6 +31,11 @@ function extractError(err: unknown, isLdap = false): string {
 
 type LoginMode = "standard" | "ldap";
 
+/** The corporate (LDAP) sign-in tab is hidden: it isn't configured for this
+ * deployment, so offering it only leads to an error. Flip to true (and make
+ * sure LDAP is configured on the backend) to bring it back. */
+const LDAP_LOGIN_ENABLED = false;
+
 const OAUTH_ERRORS: Record<string, string> = {
   oauth_denied: "Вход отменён",
   oauth_failed: "Не удалось войти через внешний сервис. Попробуйте ещё раз.",
@@ -113,34 +118,36 @@ export function SignInPage() {
           Вход
         </h1>
 
-        {/* Mode tabs */}
-        <div
-          className="absolute flex rounded-[10px] overflow-hidden border border-primary/20"
-          style={{ left: "calc(50% - 175px)", top: 80, width: 350, height: 36 }}
-        >
-          <button
-            type="button"
-            onClick={() => switchMode("standard")}
-            className={`flex-1 text-[13px] font-medium transition-colors ${
-              mode === "standard"
-                ? "bg-primary text-white"
-                : "bg-cardbg text-primary hover:bg-primary/10"
-            }`}
+        {/* Mode tabs (LDAP sign-in is hidden unless LDAP_LOGIN_ENABLED) */}
+        {LDAP_LOGIN_ENABLED && (
+          <div
+            className="absolute flex rounded-[10px] overflow-hidden border border-primary/20"
+            style={{ left: "calc(50% - 175px)", top: 80, width: 350, height: 36 }}
           >
-            Пароль
-          </button>
-          <button
-            type="button"
-            onClick={() => switchMode("ldap")}
-            className={`flex-1 text-[13px] font-medium transition-colors ${
-              mode === "ldap"
-                ? "bg-primary text-white"
-                : "bg-cardbg text-primary hover:bg-primary/10"
-            }`}
-          >
-            Корпоративный (LDAP)
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => switchMode("standard")}
+              className={`flex-1 text-[13px] font-medium transition-colors ${
+                mode === "standard"
+                  ? "bg-primary text-white"
+                  : "bg-cardbg text-primary hover:bg-primary/10"
+              }`}
+            >
+              Пароль
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode("ldap")}
+              className={`flex-1 text-[13px] font-medium transition-colors ${
+                mode === "ldap"
+                  ? "bg-primary text-white"
+                  : "bg-cardbg text-primary hover:bg-primary/10"
+              }`}
+            >
+              Корпоративный (LDAP)
+            </button>
+          </div>
+        )}
 
         {/* Email */}
         <div
