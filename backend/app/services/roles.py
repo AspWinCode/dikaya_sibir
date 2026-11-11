@@ -8,6 +8,7 @@ import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import FUNCTION_RESOURCE_TYPE
 from app.models.identity import AbacRule, ResourcePermission, Role
 from app.schemas.security import (
     AbacRuleCreate,
@@ -182,8 +183,13 @@ class RoleService:
         updated_by: uuid.UUID | None = None,
         actor_email: str | None = None,
     ) -> list[ResourcePermissionRead]:
+        # Function overrides (resource_type="function") are managed by the
+        # role-functions endpoints — replacing the resource matrix must not wipe them.
         await self._db.execute(
-            delete(ResourcePermission).where(ResourcePermission.role_id == role_id)
+            delete(ResourcePermission).where(
+                ResourcePermission.role_id == role_id,
+                ResourcePermission.resource_type != FUNCTION_RESOURCE_TYPE,
+            )
         )
         rows: list[ResourcePermission] = []
         for item in data.permissions:

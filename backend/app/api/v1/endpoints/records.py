@@ -417,7 +417,7 @@ async def delete_record(
     hard: bool = Query(default=False),
 ) -> None:
     await _resolve_entity(app_id, entity_id, current_user, db)
-    if hard and not current_user.has_role("platform_admin"):
+    if hard and not current_user.can("records.purge"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Hard delete requires platform_admin"
         )

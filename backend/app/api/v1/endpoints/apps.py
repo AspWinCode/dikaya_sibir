@@ -64,7 +64,7 @@ async def list_apps(
 
 @router.post("", response_model=AppRead, status_code=status.HTTP_201_CREATED)
 async def create_app(body: AppCreate, current_user: AuthDep, db: DbDep) -> AppRead:
-    if not current_user.has_role("platform_admin", "app_builder", "org_admin"):
+    if not current_user.can("apps.create"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
@@ -300,7 +300,7 @@ async def list_recycle_bin(
     """Admin-only, app-wide view of soft-deleted records across every entity —
     the DELETE endpoint's include_deleted=true mixes deleted rows into one
     entity's normal listing; this is a dedicated «Корзина» view."""
-    if not current_user.has_role("platform_admin", "app_admin"):
+    if not current_user.can("apps.trash"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Recycle bin access requires an admin role",

@@ -458,7 +458,7 @@ async def cancel_instance(
     Only platform_admin or app_admin may cancel instances.
     """
     await _check_app(app_id, current_user, db)
-    if not current_user.has_role("platform_admin", "app_admin"):
+    if not current_user.can("workflow.cancel"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cancellation requires platform_admin or app_admin role",

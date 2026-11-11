@@ -64,7 +64,7 @@ async def update_doc_type_config(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown doc_type {doc_type!r}"
         )
-    if not current_user.has_role("platform_admin"):
+    if not current_user.can("documents.configure"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only a platform admin can change numbering rules",

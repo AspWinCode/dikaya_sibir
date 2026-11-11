@@ -18,6 +18,8 @@ class RoleRead(BaseModel):
 class RoleCreate(BaseModel):
     display_name: str = Field(min_length=2, max_length=128)
     description: str | None = Field(default=None, max_length=512)
+    # Function codes (app.core.permissions) the new role is allowed to use.
+    functions: list[str] = Field(default_factory=list, max_length=100)
 
 
 class RoleUpdate(BaseModel):

@@ -186,7 +186,7 @@ async def ldap_login(req: LdapLoginRequest, request: Request, db: DbDep) -> Toke
 
 @router.get("/ldap-status", summary="Return LDAP configuration status (no secrets)")
 async def ldap_status(current_user: AuthDep) -> dict:
-    if not current_user.has_role("platform_admin", "org_admin"):
+    if not current_user.can("ldap.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
@@ -200,7 +200,7 @@ async def ldap_status(current_user: AuthDep) -> dict:
 
 @router.post("/ldap-test", summary="Test LDAP connection with current settings")
 async def ldap_test(current_user: AuthDep) -> dict:
-    if not current_user.has_role("platform_admin", "org_admin"):
+    if not current_user.can("ldap.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
@@ -240,7 +240,7 @@ async def get_password_policy(db: DbDep) -> PasswordPolicyRead:
 async def update_password_policy(
     body: PasswordPolicyUpdate, current_user: AuthDep, db: DbDep
 ) -> PasswordPolicyRead:
-    if not current_user.has_role("platform_admin"):
+    if not current_user.can("security.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
@@ -271,7 +271,7 @@ async def get_session_policy(db: DbDep) -> SessionPolicyRead:
 async def update_session_policy(
     body: SessionPolicyUpdate, current_user: AuthDep, db: DbDep
 ) -> SessionPolicyRead:
-    if not current_user.has_role("platform_admin"):
+    if not current_user.can("security.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
@@ -298,7 +298,7 @@ async def get_file_policy(db: DbDep) -> FilePolicyRead:
 async def update_file_policy(
     body: FilePolicyUpdate, current_user: AuthDep, db: DbDep
 ) -> FilePolicyRead:
-    if not current_user.has_role("platform_admin"):
+    if not current_user.can("security.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )

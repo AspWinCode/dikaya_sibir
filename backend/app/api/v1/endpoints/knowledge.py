@@ -28,7 +28,7 @@ router = APIRouter(prefix="/kb", tags=["knowledge-base"])
 
 
 def _require_admin(current_user: AuthDep) -> None:
-    if not current_user.has_role("platform_admin"):
+    if not current_user.can("knowledge.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only a platform admin can manage knowledge base content",
@@ -43,7 +43,7 @@ async def list_articles(
     q: str | None = Query(default=None, description="Search title and content"),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> list[ArticleListItem]:
-    include_unpublished = current_user.has_role("platform_admin")
+    include_unpublished = current_user.can("knowledge.manage")
     return await KnowledgeService(db).list_articles(
         category=category,
         query=q,
@@ -62,7 +62,7 @@ async def get_article(id_or_slug: str, current_user: AuthDep, db: DbDep) -> Arti
     try:
         return await KnowledgeService(db).get_article(
             id_or_slug,
-            include_unpublished=current_user.has_role("platform_admin"),
+            include_unpublished=current_user.can("knowledge.manage"),
         )
     except ArticleNotFoundError as exc:
         raise HTTPException(

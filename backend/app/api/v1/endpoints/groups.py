@@ -11,7 +11,7 @@ router = APIRouter(prefix="/groups", tags=["groups"])
 
 
 def _require_admin(current_user: AuthDep) -> None:
-    if not current_user.has_role("platform_admin", "org_admin"):
+    if not current_user.can("groups.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
@@ -19,7 +19,7 @@ def _require_admin(current_user: AuthDep) -> None:
 
 @router.get("", response_model=list[GroupRead], summary="List all groups")
 async def list_groups(current_user: AuthDep, db: DbDep) -> list[GroupRead]:
-    if not current_user.has_role("platform_admin", "org_admin", "auditor"):
+    if not current_user.can("groups.view"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
@@ -49,7 +49,7 @@ async def create_group(body: GroupCreate, current_user: AuthDep, db: DbDep) -> G
 
 @router.get("/{group_id}", response_model=GroupDetailRead, summary="Get group details")
 async def get_group(group_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> GroupDetailRead:
-    if not current_user.has_role("platform_admin", "org_admin", "auditor"):
+    if not current_user.can("groups.view"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )

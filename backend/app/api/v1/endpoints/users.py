@@ -42,7 +42,7 @@ async def list_users(
     role: str | None = Query(default=None),
     is_active: bool | None = Query(default=None),
 ) -> CursorPage[UserRead]:
-    if not current_user.has_role("platform_admin", "auditor", "org_admin"):
+    if not current_user.can("users.view"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
@@ -60,7 +60,7 @@ async def list_users(
     "", response_model=UserRead, status_code=status.HTTP_201_CREATED, summary="Create user"
 )
 async def create_user(body: UserCreate, current_user: AuthDep, db: DbDep) -> UserRead:
-    if not current_user.has_role("platform_admin", "org_admin"):
+    if not current_user.can("users.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
@@ -90,7 +90,7 @@ async def create_user(body: UserCreate, current_user: AuthDep, db: DbDep) -> Use
 async def invite_user(
     body: InviteUserRequest, current_user: AuthDep, db: DbDep
 ) -> InviteUserResult:
-    if not current_user.has_role("platform_admin", "org_admin"):
+    if not current_user.can("users.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
@@ -172,7 +172,7 @@ async def get_user(user_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> User
 async def update_user(
     user_id: uuid.UUID, body: UserUpdate, current_user: AuthDep, db: DbDep
 ) -> UserRead:
-    if not current_user.has_role("platform_admin", "org_admin"):
+    if not current_user.can("users.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
@@ -193,7 +193,7 @@ async def update_user(
     "/{user_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Deactivate user (soft)"
 )
 async def delete_user(user_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> None:
-    if not current_user.has_role("platform_admin", "org_admin"):
+    if not current_user.can("users.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
@@ -217,7 +217,7 @@ async def delete_user(user_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> N
 async def admin_set_password(
     user_id: uuid.UUID, body: AdminSetPasswordRequest, current_user: AuthDep, db: DbDep
 ) -> None:
-    if not current_user.has_role("platform_admin", "org_admin"):
+    if not current_user.can("users.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
@@ -270,7 +270,7 @@ async def terminate_user_sessions(user_id: uuid.UUID, current_user: AuthDep, db:
     summary="Permanently delete user from database",
 )
 async def hard_delete_user(user_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> None:
-    if not current_user.has_role("platform_admin"):
+    if not current_user.can("users.delete"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only platform_admin can hard-delete users",
@@ -295,7 +295,7 @@ async def list_all_sessions(
     db: DbDep,
     limit: int = Query(default=200, ge=1, le=500),
 ) -> list[SessionRead]:
-    if not current_user.has_role("platform_admin", "org_admin"):
+    if not current_user.can("sessions.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
@@ -308,7 +308,7 @@ async def list_all_sessions(
     summary="Force-terminate a specific session (admin)",
 )
 async def terminate_session(session_id: uuid.UUID, current_user: AuthDep, db: DbDep) -> None:
-    if not current_user.has_role("platform_admin", "org_admin"):
+    if not current_user.can("sessions.manage"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )

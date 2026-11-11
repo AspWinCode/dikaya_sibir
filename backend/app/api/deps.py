@@ -7,7 +7,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
+from app.core.database import AsyncSessionLocal, get_db
+from app.core.permissions import Overrides, user_can
 from app.core.security import decode_token
 
 logger = structlog.get_logger(__name__)
@@ -28,6 +29,13 @@ class CurrentUser:
         self.roles = roles
         self.org_id = org_id
         self.email = email
+        # Per-role function overrides, filled in by get_current_user (see
+        # app.core.permissions). Empty = built-in defaults only.
+        self.function_overrides: Overrides = {}
+
+    def can(self, function_code: str) -> bool:
+        """May this user use the given function (see app.core.permissions)?"""
+        return user_can(self.roles, function_code, self.function_overrides)
 
     def has_role(self, *roles: str) -> bool:
         return bool(set(self.roles) & set(roles))
@@ -75,12 +83,22 @@ async def get_current_user(request: Request, credentials: BearerDep) -> CurrentU
         )
 
     raw_org = payload.get("org_id")
-    return CurrentUser(
+    user = CurrentUser(
         user_id=UUID(payload["sub"]),
         roles=payload.get("roles", []),
         org_id=UUID(raw_org) if raw_org else None,
         email=payload.get("email"),
     )
+    # Only roles other than the locked platform_admin can have overrides, so
+    # a platform admin's requests never touch the database here.
+    from app.services.function_permissions import load_overrides
+
+    try:
+        async with AsyncSessionLocal() as session:
+            user.function_overrides = await load_overrides(session, user.roles)
+    except Exception:  # noqa: BLE001 - never lock everyone out over a lookup failure
+        logger.exception("function_overrides_load_failed")
+    return user
 
 
 AuthDep = Annotated[CurrentUser, Depends(get_current_user)]

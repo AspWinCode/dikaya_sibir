@@ -32,7 +32,7 @@ async def list_audit_logs(
 
     Supports filtering by level, action, user_id, and time range.
     """
-    if not current_user.has_role("platform_admin"):
+    if not current_user.can("audit.view"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Audit log access requires platform_admin role",
