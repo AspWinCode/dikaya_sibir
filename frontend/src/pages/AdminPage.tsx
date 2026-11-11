@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { cn } from "@/lib/cn";
 import { PasswordInput } from "@/shared/components/PasswordInput";
@@ -10,9 +10,10 @@ import { useOrgs, useCreateOrg, useUpdateOrg } from "@/shared/hooks/useOrgs";
 import { useHealth } from "@/shared/hooks/useHealth";
 import { useAuthStore } from "@/shared/auth/store";
 import { useAllSessions, useTerminateSession, useTerminateUserSessions } from "@/shared/hooks/useSessions";
-import { useAllRoles, useCreateRole, useDeleteRole } from "@/shared/hooks/useRbac";
+import { useAllRoles, useCreateRole, useDeleteRole, useFunctionCatalog } from "@/shared/hooks/useRbac";
 import { EmailTemplatesContent } from "@/pages/EmailTemplatesPage";
 import { AdminLearning } from "@/pages/AdminLearning";
+import { FunctionChecklist, RoleFunctionsPanel } from "@/pages/RoleFunctions";
 
 /* ── Types ── */
 type AdminSection = "home" | "orgs" | "logs" | "users" | "groups" | "roles" | "apps" | "databases" | "sessions" | "notifications" | "learning";
@@ -1999,6 +2000,18 @@ function AdminRoles() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [newFunctions, setNewFunctions] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const catalogQ = useFunctionCatalog();
+
+  function toggleExpanded(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const systemRoles = roles.filter((r) => r.is_system);
   const customRoles = roles.filter((r) => !r.is_system);
@@ -2007,12 +2020,13 @@ function AdminRoles() {
     e.preventDefault();
     if (!newName.trim()) return;
     createRole.mutate(
-      { display_name: newName.trim(), description: newDesc.trim() || undefined },
+      { display_name: newName.trim(), description: newDesc.trim() || undefined, functions: [...newFunctions] },
       {
         onSuccess: () => {
           setCreateOpen(false);
           setNewName("");
           setNewDesc("");
+          setNewFunctions(new Set());
         },
       }
     );
@@ -2028,7 +2042,7 @@ function AdminRoles() {
           onClick={() => setCreateOpen(false)}
         >
           <div
-            className="bg-white rounded-[20px] w-[460px] flex flex-col"
+            className="bg-white rounded-[20px] w-[640px] max-h-[90vh] flex flex-col"
             style={{ boxShadow: "0 8px 40px rgba(0,32,95,0.18)" }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -2039,7 +2053,7 @@ function AdminRoles() {
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-mainbg transition-colors text-primary/40 text-[22px] leading-none"
               >×</button>
             </div>
-            <form onSubmit={handleCreate} className="flex flex-col gap-[18px] px-[30px] pb-[28px]">
+            <form onSubmit={handleCreate} className="flex flex-col gap-[18px] px-[30px] pb-[28px] overflow-y-auto">
               <div className="flex flex-col gap-[6px]">
                 <label className="text-[13px] font-medium text-primary/60">Название роли</label>
                 <input
@@ -2059,6 +2073,41 @@ function AdminRoles() {
                   placeholder="Краткое описание роли и её назначения"
                   className="px-[14px] py-[10px] bg-mainbg rounded-[10px] text-[15px] text-primary outline-none border border-transparent focus:border-cta transition-colors placeholder:text-primary/30 resize-none"
                 />
+              </div>
+              <div className="flex flex-col gap-[10px]">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-[13px] font-medium text-primary/60">
+                    Что может эта роль <span className="text-primary/30">(выбрано {newFunctions.size})</span>
+                  </label>
+                  <div className="flex gap-3 text-[12px] font-medium text-cta">
+                    <button
+                      type="button"
+                      className="hover:underline"
+                      onClick={() => setNewFunctions(new Set((catalogQ.data ?? []).filter((f) => f.code.endsWith(".view")).map((f) => f.code)))}
+                    >
+                      Только просмотр
+                    </button>
+                    <button
+                      type="button"
+                      className="hover:underline"
+                      onClick={() => setNewFunctions(new Set((catalogQ.data ?? []).map((f) => f.code)))}
+                    >
+                      Выбрать все
+                    </button>
+                    <button type="button" className="hover:underline" onClick={() => setNewFunctions(new Set())}>
+                      Снять все
+                    </button>
+                  </div>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto rounded-[10px] border border-cardbg p-3">
+                  {catalogQ.isLoading && <p className="text-[13px] text-primary/40">Загрузка функций…</p>}
+                  {catalogQ.isError && (
+                    <p className="text-[13px] text-[#C22A2A]">Не удалось загрузить список функций.</p>
+                  )}
+                  {catalogQ.data && (
+                    <FunctionChecklist catalog={catalogQ.data} selected={newFunctions} onChange={setNewFunctions} />
+                  )}
+                </div>
               </div>
               {createRole.isError && (
                 <p className="text-[13px] text-[#C22A2A] bg-[#FFF0F0] rounded-[8px] px-3 py-2">
@@ -2144,23 +2193,39 @@ function AdminRoles() {
             <table className="w-full">
               <thead className="bg-mainbg">
                 <tr>
-                  {["Роль", "ID", "Описание", "Тип"].map((h) => (
+                  {["Роль", "ID", "Описание", "Тип", "Функции"].map((h) => (
                     <th key={h} className="text-left px-6 py-3 text-[13px] font-semibold text-primary">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {systemRoles.map((r) => (
-                  <tr key={r.id} className="border-t border-mainbg">
-                    <td className="px-6 py-3 text-[15px] font-semibold text-primary">{r.display_name}</td>
-                    <td className="px-6 py-3 text-[13px] text-primary/60 font-mono">{r.id}</td>
-                    <td className="px-6 py-3 text-[13px] text-primary/60">{r.description ?? "—"}</td>
-                    <td className="px-6 py-3">
-                      <span className="text-[11px] font-semibold bg-cta/10 text-cta px-2 py-0.5 rounded-full">
-                        системная
-                      </span>
-                    </td>
-                  </tr>
+                  <Fragment key={r.id}>
+                    <tr
+                      className="border-t border-mainbg cursor-pointer hover:bg-mainbg/40"
+                      onClick={() => toggleExpanded(r.id)}
+                    >
+                      <td className="px-6 py-3 text-[15px] font-semibold text-primary">{r.display_name}</td>
+                      <td className="px-6 py-3 text-[13px] text-primary/60 font-mono">{r.id}</td>
+                      <td className="px-6 py-3 text-[13px] text-primary/60">{r.description ?? "—"}</td>
+                      <td className="px-6 py-3">
+                        <span className="text-[11px] font-semibold bg-cta/10 text-cta px-2 py-0.5 rounded-full">
+                          системная
+                        </span>
+                      </td>
+                      <td className="px-6 py-3 text-[13px] font-medium text-cta whitespace-nowrap">
+                        <span aria-hidden>{expanded.has(r.id) ? "▾" : "▸"}</span>{" "}
+                        {expanded.has(r.id) ? "Скрыть" : "Показать"}
+                      </td>
+                    </tr>
+                    {expanded.has(r.id) && (
+                      <tr className="bg-mainbg/30">
+                        <td colSpan={5} className="px-6 py-4">
+                          <RoleFunctionsPanel role={r} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -2185,14 +2250,18 @@ function AdminRoles() {
             <table className="w-full">
               <thead className="bg-mainbg">
                 <tr>
-                  {["Название", "ID", "Описание", "Тип", ""].map((h) => (
-                    <th key={h} className="text-left px-6 py-3 text-[13px] font-semibold text-primary">{h}</th>
+                  {["Название", "ID", "Описание", "Тип", "Функции", ""].map((h, i) => (
+                    <th key={h + i} className="text-left px-6 py-3 text-[13px] font-semibold text-primary">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {customRoles.map((r) => (
-                  <tr key={r.id} className="border-t border-mainbg hover:bg-mainbg/40">
+                  <Fragment key={r.id}>
+                  <tr
+                    className="border-t border-mainbg cursor-pointer hover:bg-mainbg/40"
+                    onClick={() => toggleExpanded(r.id)}
+                  >
                     <td className="px-6 py-3 text-[15px] font-semibold text-primary">{r.display_name}</td>
                     <td className="px-6 py-3 text-[12px] text-primary/50 font-mono">{r.id}</td>
                     <td className="px-6 py-3 text-[13px] text-primary/60">{r.description ?? "—"}</td>
@@ -2201,15 +2270,27 @@ function AdminRoles() {
                         пользовательская
                       </span>
                     </td>
+                    <td className="px-6 py-3 text-[13px] font-medium text-cta whitespace-nowrap">
+                      <span aria-hidden>{expanded.has(r.id) ? "▾" : "▸"}</span>{" "}
+                      {expanded.has(r.id) ? "Скрыть" : "Показать"}
+                    </td>
                     <td className="px-6 py-3 text-right">
                       <button
-                        onClick={() => setDeleteConfirm({ id: r.id, name: r.display_name })}
+                        onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ id: r.id, name: r.display_name }); }}
                         className="text-[13px] text-primary/40 hover:text-[#C22A2A] transition-colors"
                       >
                         Удалить
                       </button>
                     </td>
                   </tr>
+                  {expanded.has(r.id) && (
+                    <tr className="bg-mainbg/30">
+                      <td colSpan={6} className="px-6 py-4">
+                        <RoleFunctionsPanel role={r} />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

@@ -10,6 +10,8 @@ export interface Role {
 export interface RoleCreate {
   display_name: string;
   description?: string | null;
+  /** Function codes the new role may use (see the function catalog). */
+  functions?: string[];
 }
 
 export interface RoleUpdate {
@@ -128,4 +130,37 @@ export async function updateAbacRule(ruleId: string, body: AbacRuleUpdate): Prom
 
 export async function deleteAbacRule(ruleId: string): Promise<void> {
   await apiClient.delete(`/abac-rules/${ruleId}`);
+}
+
+export interface FunctionCatalogItem {
+  code: string;
+  label: string;
+  description: string;
+  group: string;
+}
+
+export interface RoleFunctions {
+  role_id: string;
+  /** platform_admin: every function, can't be edited. */
+  locked: boolean;
+  is_system: boolean;
+  /** Function codes the role may use right now. */
+  allowed: string[];
+  /** Function codes the role has out of the box. */
+  defaults: string[];
+}
+
+export async function listFunctionCatalog(): Promise<FunctionCatalogItem[]> {
+  const { data } = await apiClient.get<FunctionCatalogItem[]>("/permissions/catalog");
+  return data;
+}
+
+export async function getRoleFunctions(roleId: string): Promise<RoleFunctions> {
+  const { data } = await apiClient.get<RoleFunctions>(`/roles/${roleId}/functions`);
+  return data;
+}
+
+export async function saveRoleFunctions(roleId: string, allowed: string[]): Promise<RoleFunctions> {
+  const { data } = await apiClient.put<RoleFunctions>(`/roles/${roleId}/functions`, { allowed });
+  return data;
 }

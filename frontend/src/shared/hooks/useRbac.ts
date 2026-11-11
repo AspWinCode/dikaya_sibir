@@ -5,9 +5,12 @@ import {
   deleteAbacRule,
   deleteRole,
   listAbacRules,
+  getRoleFunctions,
+  listFunctionCatalog,
   listRolePermissions,
   listRoles,
   replaceRolePermissions,
+  saveRoleFunctions,
   updateAbacRule,
   updateRole,
   type AbacRuleCreate,
@@ -99,5 +102,28 @@ export function useDeleteAbacRule() {
   return useMutation({
     mutationFn: (ruleId: string) => deleteAbacRule(ruleId),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["abac-rules"] }); },
+  });
+}
+
+export function useFunctionCatalog() {
+  return useQuery({ queryKey: ["function-catalog"], queryFn: listFunctionCatalog, staleTime: 5 * 60_000 });
+}
+
+export function useRoleFunctions(roleId: string | null) {
+  return useQuery({
+    queryKey: ["role-functions", roleId],
+    queryFn: () => getRoleFunctions(roleId!),
+    enabled: !!roleId,
+  });
+}
+
+export function useSaveRoleFunctions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ roleId, allowed }: { roleId: string; allowed: string[] }) =>
+      saveRoleFunctions(roleId, allowed),
+    onSuccess: (data) => {
+      qc.setQueryData(["role-functions", data.role_id], data);
+    },
   });
 }
