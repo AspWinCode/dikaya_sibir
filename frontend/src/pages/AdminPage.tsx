@@ -13,6 +13,7 @@ import { useAllSessions, useTerminateSession, useTerminateUserSessions } from "@
 import { useAllRoles, useCreateRole, useDeleteRole, useFunctionCatalog } from "@/shared/hooks/useRbac";
 import { EmailTemplatesContent } from "@/pages/EmailTemplatesPage";
 import { AdminLearning } from "@/pages/AdminLearning";
+import { MIN_PASSWORD, orgCreateErrorMessage, slugify, validateOrgForm } from "@/shared/lib/orgForm";
 import { FunctionChecklist, RoleFunctionsPanel } from "@/pages/RoleFunctions";
 
 /* ── Types ── */
@@ -1756,7 +1757,27 @@ const PLAN_LABELS: Record<string, string> = {
   business: "Бизнес",
 };
 
-function CreateOrgDialog({ onClose }: { onClose: () => void }) {
+/** One labelled form row. Top-level (not nested in the dialog) so inputs keep focus while typing. */
+function OrgField({ label, hint, error, children }: {
+  label: string;
+  hint?: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-[14px] font-semibold text-primary">{label}</label>
+      {children}
+      {error ? (
+        <p className="text-[12px] text-[#C22A2A]">{error}</p>
+      ) : hint ? (
+        <p className="text-[12px] text-primary/50">{hint}</p>
+      ) : null}
+    </div>
+  );
+}
+
+export function CreateOrgDialog({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
     display_name: "",
     slug: "",
@@ -1765,25 +1786,33 @@ function CreateOrgDialog({ onClose }: { onClose: () => void }) {
     admin_display_name: "",
     admin_password: "",
   });
+  // The ID follows the company name until the user edits it by hand.
+  const [slugTouched, setSlugTouched] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const create = useCreateOrg();
+
+  const errors = validateOrgForm(form);
 
   function set(k: string, v: string) {
     setForm((f) => ({ ...f, [k]: v }));
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    create.mutate(form, { onSuccess: onClose });
+  function onNameChange(v: string) {
+    setForm((f) => ({ ...f, display_name: v, slug: slugTouched ? f.slug : slugify(v) }));
   }
 
-  const fields: { key: keyof typeof form; label: string; type?: string; placeholder: string }[] = [
-    { key: "display_name",      label: "Название организации",  placeholder: "ООО Ромашка" },
-    { key: "slug",              label: "Slug (ID)",             placeholder: "romashka" },
-    { key: "plan",              label: "Тариф",                 placeholder: "trial" },
-    { key: "admin_email",       label: "Email администратора",  type: "email", placeholder: "admin@company.ru" },
-    { key: "admin_display_name",label: "Имя администратора",    placeholder: "Иван Петров" },
-    { key: "admin_password",    label: "Пароль администратора", type: "password", placeholder: "••••••••••" },
-  ];
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitted(true);
+    if (Object.keys(errors).length > 0) return;
+    create.mutate(
+      { ...form, display_name: form.display_name.trim(), admin_email: form.admin_email.trim(), admin_display_name: form.admin_display_name.trim() },
+      { onSuccess: onClose },
+    );
+  }
+
+  const inputCls =
+    "h-[44px] px-4 bg-mainbg rounded-[8px] text-[15px] text-primary outline-none border border-[#cbe3ff] focus:border-cta w-full";
 
   return (
     <div
@@ -1792,7 +1821,7 @@ function CreateOrgDialog({ onClose }: { onClose: () => void }) {
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-[20px] shadow-[0_8px_32px_rgba(0,32,95,0.15)] w-[540px] flex flex-col"
+        className="bg-white rounded-[20px] shadow-[0_8px_32px_rgba(0,32,95,0.15)] w-[540px] max-h-[92vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-8 py-6 border-b border-[#cbe3ff]">
@@ -1806,22 +1835,64 @@ function CreateOrgDialog({ onClose }: { onClose: () => void }) {
             </svg>
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5 px-8 py-6">
-          {fields.map(({ key, label, type = "text", placeholder }) => (
-            <div key={key} className="flex flex-col gap-1">
-              <label className="text-[14px] font-semibold text-primary">{label}</label>
-              <input
-                type={type}
-                value={form[key]}
-                onChange={(e) => set(key, e.target.value)}
-                required
-                placeholder={placeholder}
-                className="h-[44px] px-4 bg-mainbg rounded-[8px] text-[15px] text-primary outline-none border border-[#cbe3ff] focus:border-cta"
-              />
-            </div>
-          ))}
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 px-8 py-6 overflow-y-auto">
+          <OrgField error={submitted ? errors.display_name : undefined} label="Название организации">
+            <input
+              value={form.display_name}
+              onChange={(e) => onNameChange(e.target.value)}
+              placeholder="ООО Ромашка"
+              className={inputCls}
+            />
+          </OrgField>
+          <OrgField
+            error={submitted ? errors.slug : undefined}
+            label="ID организации (slug)"
+            hint="Подставляется из названия. Только строчная латиница, цифры, «-» и «_»."
+          >
+            <input
+              value={form.slug}
+              onChange={(e) => { setSlugTouched(true); set("slug", e.target.value.toLowerCase()); }}
+              placeholder="romashka"
+              className={`${inputCls} font-mono`}
+            />
+          </OrgField>
+          <OrgField label="Тариф">
+            <select value={form.plan} onChange={(e) => set("plan", e.target.value)} className={inputCls}>
+              {Object.entries(PLAN_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </OrgField>
+          <OrgField error={submitted ? errors.admin_email : undefined} label="Email администратора">
+            <input
+              type="email"
+              value={form.admin_email}
+              onChange={(e) => set("admin_email", e.target.value)}
+              placeholder="admin@company.ru"
+              className={inputCls}
+            />
+          </OrgField>
+          <OrgField error={submitted ? errors.admin_display_name : undefined} label="Имя администратора">
+            <input
+              value={form.admin_display_name}
+              onChange={(e) => set("admin_display_name", e.target.value)}
+              placeholder="Иван Петров"
+              className={inputCls}
+            />
+          </OrgField>
+          <OrgField error={submitted ? errors.admin_password : undefined} label="Пароль администратора" hint={`Не менее ${MIN_PASSWORD} символов. Передайте его администратору безопасным способом.`}>
+            <PasswordInput
+              value={form.admin_password}
+              onChange={(e) => set("admin_password", e.target.value)}
+              placeholder="••••••••••"
+              autoComplete="new-password"
+              className={inputCls}
+            />
+          </OrgField>
           {create.isError && (
-            <p className="text-[14px] text-[#C22A2A]">Ошибка создания. Проверьте данные.</p>
+            <p className="text-[14px] text-[#C22A2A] bg-[#FFF0F0] rounded-[8px] px-3 py-2">
+              {orgCreateErrorMessage(create.error)}
+            </p>
           )}
           <div className="flex gap-3 pt-2">
             <button

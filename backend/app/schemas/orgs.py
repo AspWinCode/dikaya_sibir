@@ -8,7 +8,11 @@ class OrgCreate(BaseModel):
     slug: str = Field(min_length=2, max_length=128, pattern=r"^[a-z0-9_-]+$")
     display_name: str = Field(min_length=2, max_length=256)
     plan: str = Field(default="trial", max_length=64)
-    admin_email: str = Field(description="Email первого org_admin")
+    admin_email: str = Field(
+        description="Email первого org_admin",
+        pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+        max_length=256,
+    )
     admin_display_name: str = Field(min_length=2, max_length=256)
     admin_password: str = Field(min_length=10, max_length=128)
 
