@@ -61,16 +61,19 @@ const FIELD_LABEL: Record<string, string> = {
 /** Human-readable reason for a failed "create organisation" request. */
 export function orgCreateErrorMessage(err: unknown): string {
   if (isAxiosError(err) && err.response) {
-    const { status, data } = err.response as { status: number; data?: { detail?: unknown } };
+    const { status, data } = err.response as { status: number; data?: { detail?: unknown; errors?: unknown } };
     const detail = data?.detail;
+    // The API answers 422 as RFC 7807: a generic `detail` string plus the
+    // per-field list in `errors` (older/other handlers put the list in `detail`).
+    const fieldErrors = Array.isArray(data?.errors) ? data.errors : Array.isArray(detail) ? detail : null;
 
     if (status === 409 && typeof detail === "string") {
       if (/slug/i.test(detail)) return "Организация с таким ID (slug) уже существует. Выберите другой.";
       if (/email/i.test(detail)) return "Пользователь с такой почтой уже зарегистрирован.";
     }
     if (status === 403) return "Недостаточно прав: создавать организации может только администратор платформы.";
-    if (status === 422 && Array.isArray(detail)) {
-      const fields = detail
+    if (status === 422 && fieldErrors) {
+      const fields = fieldErrors
         .map((d) => (d as { loc?: unknown[] }).loc?.[1])
         .filter((f): f is string => typeof f === "string")
         .map((f) => FIELD_LABEL[f] ?? f);

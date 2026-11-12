@@ -40,6 +40,15 @@ describe("orgCreateErrorMessage", () => {
     expect(orgCreateErrorMessage(apiError(409, { detail: "Slug already taken: x" }))).toMatch(/ID \(slug\)/);
     expect(orgCreateErrorMessage(apiError(409, { detail: "Email already registered: a@b.c" }))).toMatch(/почтой/);
   });
+  it("reads the per-field list from the RFC 7807 `errors` the API really returns", () => {
+    const msg = orgCreateErrorMessage(
+      apiError(422, {
+        detail: "Request body or query parameters failed validation.",
+        errors: [{ loc: ["body", "slug"] }, { loc: ["body", "admin_email"] }],
+      }),
+    );
+    expect(msg).toBe("Проверьте поля: ID (slug), Email администратора.");
+  });
   it("names the fields a 422 complains about", () => {
     const msg = orgCreateErrorMessage(
       apiError(422, { detail: [{ loc: ["body", "slug"] }, { loc: ["body", "admin_password"] }] }),
